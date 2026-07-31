@@ -1,0 +1,102 @@
+mkdir -p backend/app/api backend/app/core backend/app/engine backend/app/ledger backend/app/scripts backend/alembic/versions frontend/src/pages frontend/src/components frontend/public database regulatory-profiles docs .github/workflows
+
+# إنشاء ملف .env.example
+cat > .env.example << 'EOF'
+DATABASE_URL=postgresql+asyncpg://trustion:trustion@localhost:5432/trustion
+REDIS_URL=redis://localhost:6379
+EOF
+
+# docker-compose.yml
+cat > docker-compose.yml << 'EOF'
+version: "3.8"
+services:
+  api:
+    build: ./backend
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - EDGE_SIGNER_MODE=software
+    depends_on:
+      - db
+      - redis
+    command: sh -c "alembic upgrade head && python -m app.scripts.load_regulatory_data && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+  db:
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      - POSTGRES_USER=trustion
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=trustion
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  redis:
+    image: redis:7-alpine
+volumes:
+  pgdata:
+EOF
+
+# backend/Dockerfile
+cat > backend/Dockerfile << 'EOF'
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+EOF
+
+# backend/requirements.txt
+cat > backend/requirements.txt << 'EOF'
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+sqlalchemy[asyncio]==2.0.35
+asyncpg==0.29.0
+alembic==1.13.0
+redis==5.0.0
+cryptography==42.0.0
+pydantic==2.9.0
+python-dotenv==1.0.0
+httpx==0.27.0
+EOF
+
+# frontend/Dockerfile
+cat > frontend/Dockerfile << 'EOF'
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+EOF
+
+# frontend/package.json
+cat > frontend/package.json << 'EOF'
+{
+  "name": "s3v-trustion",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.40",
+    "tailwindcss": "^3.4.7",
+    "vite": "^5.4.0"
+  }
+}
+EOF
+
+echo "✅ تم إنشاء الهيكل الأساسي"
