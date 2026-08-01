@@ -1,15 +1,29 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: S³V TRUSTION - Maritime Carbon Evidence Ledger API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: vessels
+    description: Fleet vessel management
+  - name: ledger
+    description: Append-only evidence ledger
+  - name: emissions
+    description: Multi-gas emissions calculations
+  - name: regulatory-profiles
+    description: Versioned regulatory parameters
+  - name: alerts
+    description: Materiality guard alerts
+  - name: auditor
+    description: Auditor gateway and verifier decisions
+  - name: dashboard
+    description: Dashboard summaries and fleet overview
+
 paths:
   /healthz:
     get:
@@ -24,6 +38,431 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── DASHBOARD ────────────────────────────────────────────────────────────────
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Fleet-wide compliance summary
+      responses:
+        "200":
+          description: Dashboard summary metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/recent-events:
+    get:
+      operationId: getDashboardRecentEvents
+      tags: [dashboard]
+      summary: Recent ledger events across all vessels
+      responses:
+        "200":
+          description: Recent events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerEntry"
+
+  /dashboard/alert-breakdown:
+    get:
+      operationId: getDashboardAlertBreakdown
+      tags: [dashboard]
+      summary: Alert counts grouped by severity
+      responses:
+        "200":
+          description: Alert breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertBreakdown"
+
+  # ─── VESSELS ──────────────────────────────────────────────────────────────────
+  /vessels:
+    get:
+      operationId: getVessels
+      tags: [vessels]
+      summary: List all monitored vessels
+      responses:
+        "200":
+          description: List of vessels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Vessel"
+    post:
+      operationId: createVessel
+      tags: [vessels]
+      summary: Register a new vessel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VesselInput"
+      responses:
+        "201":
+          description: Vessel created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vessel"
+
+  /vessels/{id}:
+    get:
+      operationId: getVessel
+      tags: [vessels]
+      summary: Get a single vessel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Vessel detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vessel"
+        "404":
+          description: Not found
+
+  /vessels/{id}/compliance:
+    get:
+      operationId: getVesselCompliance
+      tags: [vessels]
+      summary: Compliance status for a vessel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Vessel compliance status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VesselCompliance"
+
+  /vessels/{id}/emissions-trend:
+    get:
+      operationId: getVesselEmissionsTrend
+      tags: [vessels]
+      summary: Monthly CO2e trend for a vessel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Emissions trend data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmissionsTrendPoint"
+
+  # ─── LEDGER ───────────────────────────────────────────────────────────────────
+  /ledger/entries:
+    get:
+      operationId: getLedgerEntries
+      tags: [ledger]
+      summary: List ledger evidence entries
+      parameters:
+        - name: vesselId
+          in: query
+          schema:
+            type: ["number", "null"]
+        - name: temporalTrust
+          in: query
+          schema:
+            type: ["string", "null"]
+            enum: [TRUSTED_GNSS, BACKFILL, DRIFT_WARNING, null]
+        - name: limit
+          in: query
+          schema:
+            type: number
+            default: 50
+      responses:
+        "200":
+          description: List of ledger entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerEntry"
+    post:
+      operationId: ingestLedgerEntry
+      tags: [ledger]
+      summary: Ingest a new signed telemetry event into the ledger
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LedgerEntryInput"
+      responses:
+        "201":
+          description: Entry appended to ledger
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerEntry"
+
+  /ledger/entries/{id}:
+    get:
+      operationId: getLedgerEntry
+      tags: [ledger]
+      summary: Get a single ledger entry with Merkle proof
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Ledger entry detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerEntryDetail"
+        "404":
+          description: Not found
+
+  /ledger/chain-status:
+    get:
+      operationId: getLedgerChainStatus
+      tags: [ledger]
+      summary: Merkle chain integrity status
+      responses:
+        "200":
+          description: Chain status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChainStatus"
+
+  # ─── EMISSIONS ────────────────────────────────────────────────────────────────
+  /emissions:
+    get:
+      operationId: getEmissions
+      tags: [emissions]
+      summary: List emissions records
+      parameters:
+        - name: vesselId
+          in: query
+          schema:
+            type: ["number", "null"]
+        - name: scope
+          in: query
+          schema:
+            type: ["string", "null"]
+            enum: [WTW, TTW, null]
+      responses:
+        "200":
+          description: List of emissions records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmissionsRecord"
+
+  /emissions/vessel/{vesselId}:
+    get:
+      operationId: getVesselEmissions
+      tags: [emissions]
+      summary: Aggregated emissions summary for a vessel
+      parameters:
+        - name: vesselId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Vessel emissions summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VesselEmissionsSummary"
+
+  # ─── REGULATORY PROFILES ──────────────────────────────────────────────────────
+  /regulatory-profiles:
+    get:
+      operationId: getRegulatoryProfiles
+      tags: [regulatory-profiles]
+      summary: List all versioned regulatory profiles
+      responses:
+        "200":
+          description: List of regulatory profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RegulatoryProfile"
+    post:
+      operationId: createRegulatoryProfile
+      tags: [regulatory-profiles]
+      summary: Create a new regulatory profile version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegulatoryProfileInput"
+      responses:
+        "201":
+          description: Profile created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegulatoryProfile"
+
+  /regulatory-profiles/{id}:
+    get:
+      operationId: getRegulatoryProfile
+      tags: [regulatory-profiles]
+      summary: Get a single regulatory profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Regulatory profile detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegulatoryProfile"
+        "404":
+          description: Not found
+
+  # ─── ALERTS ───────────────────────────────────────────────────────────────────
+  /alerts:
+    get:
+      operationId: getAlerts
+      tags: [alerts]
+      summary: List materiality guard alerts
+      parameters:
+        - name: vesselId
+          in: query
+          schema:
+            type: ["number", "null"]
+        - name: severity
+          in: query
+          schema:
+            type: ["string", "null"]
+            enum: [WATCH, LEGAL_WARNING, THRESHOLD_EXCEEDED, null]
+        - name: acknowledged
+          in: query
+          schema:
+            type: ["boolean", "null"]
+      responses:
+        "200":
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+
+  /alerts/{id}/acknowledge:
+    patch:
+      operationId: acknowledgeAlert
+      tags: [alerts]
+      summary: Acknowledge a materiality alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertAcknowledge"
+      responses:
+        "200":
+          description: Alert acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+
+  # ─── AUDITOR ──────────────────────────────────────────────────────────────────
+  /auditor/evidence/{vesselId}:
+    get:
+      operationId: getAuditorEvidence
+      tags: [auditor]
+      summary: Read-only evidence package for a vessel (auditor access)
+      parameters:
+        - name: vesselId
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Evidence package
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidencePackage"
+
+  /auditor/decisions:
+    get:
+      operationId: getAuditorDecisions
+      tags: [auditor]
+      summary: List all verifier decisions (append-only)
+      responses:
+        "200":
+          description: List of auditor decisions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditorDecision"
+    post:
+      operationId: submitAuditorDecision
+      tags: [auditor]
+      summary: Submit a verifier decision (append-only, never overwrites)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuditorDecisionInput"
+      responses:
+        "201":
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditorDecision"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +473,430 @@ components:
       required:
         - status
 
+    # ─── DASHBOARD ──────────────────────────────────────────────────────────────
+    DashboardSummary:
+      type: object
+      required: [totalVessels, activeVessels, totalLedgerEntries, totalCo2eKg, openAlerts, chainIntegrity, lastIngestAt]
+      properties:
+        totalVessels:
+          type: number
+        activeVessels:
+          type: number
+        totalLedgerEntries:
+          type: number
+        totalCo2eKg:
+          type: number
+        openAlerts:
+          type: number
+        chainIntegrity:
+          type: string
+          enum: [INTACT, BROKEN, UNKNOWN]
+        lastIngestAt:
+          type: ["string", "null"]
+
+    AlertBreakdown:
+      type: object
+      required: [watch, legalWarning, thresholdExceeded]
+      properties:
+        watch:
+          type: number
+        legalWarning:
+          type: number
+        thresholdExceeded:
+          type: number
+
+    # ─── VESSELS ────────────────────────────────────────────────────────────────
+    Vessel:
+      type: object
+      required: [id, imoNumber, name, flag, vesselType, grossTonnage, reportingYear, status, createdAt]
+      properties:
+        id:
+          type: number
+        imoNumber:
+          type: string
+        name:
+          type: string
+        flag:
+          type: string
+        vesselType:
+          type: string
+        grossTonnage:
+          type: number
+        reportingYear:
+          type: number
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, DRYDOCK]
+        createdAt:
+          type: string
+
+    VesselInput:
+      type: object
+      required: [imoNumber, name, flag, vesselType, grossTonnage, reportingYear]
+      properties:
+        imoNumber:
+          type: string
+        name:
+          type: string
+        flag:
+          type: string
+        vesselType:
+          type: string
+        grossTonnage:
+          type: number
+        reportingYear:
+          type: number
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, DRYDOCK]
+          default: ACTIVE
+
+    VesselCompliance:
+      type: object
+      required: [vesselId, reportingYear, dataGapPct, estimatedPct, unverifiedPct, overallStatus, regulatoryProfile]
+      properties:
+        vesselId:
+          type: number
+        reportingYear:
+          type: number
+        dataGapPct:
+          type: number
+        estimatedPct:
+          type: number
+        unverifiedPct:
+          type: number
+        overallStatus:
+          type: string
+          enum: [COMPLIANT, AT_RISK, NON_COMPLIANT]
+        regulatoryProfile:
+          type: ["string", "null"]
+
+    EmissionsTrendPoint:
+      type: object
+      required: [month, co2Kg, ch4Kg, n2oKg, co2eKg]
+      properties:
+        month:
+          type: string
+        co2Kg:
+          type: number
+        ch4Kg:
+          type: number
+        n2oKg:
+          type: number
+        co2eKg:
+          type: number
+
+    # ─── LEDGER ─────────────────────────────────────────────────────────────────
+    LedgerEntry:
+      type: object
+      required: [id, vesselId, eventType, timestampGnss, temporalTrust, fuelType, fuelMassKg, engineLoadPct, rawHash, chainHash, signerMode, isEstimated, createdAt]
+      properties:
+        id:
+          type: number
+        vesselId:
+          type: number
+        vesselName:
+          type: ["string", "null"]
+        eventType:
+          type: string
+        timestampGnss:
+          type: string
+        timestampDevice:
+          type: ["string", "null"]
+        timestampServer:
+          type: ["string", "null"]
+        temporalTrust:
+          type: string
+          enum: [TRUSTED_GNSS, BACKFILL, DRIFT_WARNING]
+        fuelType:
+          type: string
+        fuelMassKg:
+          type: number
+        engineLoadPct:
+          type: number
+        positionLat:
+          type: ["number", "null"]
+        positionLon:
+          type: ["number", "null"]
+        rawHash:
+          type: string
+        prevHash:
+          type: ["string", "null"]
+        chainHash:
+          type: string
+        signature:
+          type: ["string", "null"]
+        signerMode:
+          type: string
+          enum: [TPM2, SOFTWARE_ED25519, UNSIGNED]
+        isEstimated:
+          type: boolean
+        createdAt:
+          type: string
+
+    LedgerEntryInput:
+      type: object
+      required: [vesselId, eventType, timestampGnss, fuelType, fuelMassKg, engineLoadPct, signerMode]
+      properties:
+        vesselId:
+          type: number
+        eventType:
+          type: string
+        timestampGnss:
+          type: string
+        timestampDevice:
+          type: ["string", "null"]
+        fuelType:
+          type: string
+        fuelMassKg:
+          type: number
+        engineLoadPct:
+          type: number
+        positionLat:
+          type: ["number", "null"]
+        positionLon:
+          type: ["number", "null"]
+        signature:
+          type: ["string", "null"]
+        signerMode:
+          type: string
+          enum: [TPM2, SOFTWARE_ED25519, UNSIGNED]
+        isEstimated:
+          type: boolean
+          default: false
+
+    LedgerEntryDetail:
+      type: object
+      required: [entry, merkleProof, chainValid]
+      properties:
+        entry:
+          $ref: "#/components/schemas/LedgerEntry"
+        merkleProof:
+          type: array
+          items:
+            type: string
+        chainValid:
+          type: boolean
+
+    ChainStatus:
+      type: object
+      required: [totalEntries, lastHash, integrityStatus, checkedAt]
+      properties:
+        totalEntries:
+          type: number
+        lastHash:
+          type: ["string", "null"]
+        integrityStatus:
+          type: string
+          enum: [INTACT, BROKEN, UNKNOWN]
+        brokenAtEntry:
+          type: ["number", "null"]
+        checkedAt:
+          type: string
+
+    # ─── EMISSIONS ──────────────────────────────────────────────────────────────
+    EmissionsRecord:
+      type: object
+      required: [id, vesselId, ledgerEntryId, scope, co2Kg, ch4Kg, n2oKg, co2eKg, wtwFactor, ttwFactor, methaneSlipMethod, computedAt]
+      properties:
+        id:
+          type: number
+        vesselId:
+          type: number
+        ledgerEntryId:
+          type: number
+        scope:
+          type: string
+          enum: [WTW, TTW]
+        co2Kg:
+          type: number
+        ch4Kg:
+          type: number
+        n2oKg:
+          type: number
+        co2eKg:
+          type: number
+        wtwFactor:
+          type: number
+        ttwFactor:
+          type: number
+        methaneSlipMethod:
+          type: string
+          enum: [REGULATORY_DEFAULT, BIN_INTERPOLATION, VERIFIED_ACTUAL]
+        regulatoryProfileId:
+          type: ["number", "null"]
+        computedAt:
+          type: string
+
+    VesselEmissionsSummary:
+      type: object
+      required: [vesselId, totalCo2Kg, totalCh4Kg, totalN2oKg, totalCo2eKg, wtwCo2eKg, ttwCo2eKg, recordCount]
+      properties:
+        vesselId:
+          type: number
+        totalCo2Kg:
+          type: number
+        totalCh4Kg:
+          type: number
+        totalN2oKg:
+          type: number
+        totalCo2eKg:
+          type: number
+        wtwCo2eKg:
+          type: number
+        ttwCo2eKg:
+          type: number
+        recordCount:
+          type: number
+
+    # ─── REGULATORY PROFILES ────────────────────────────────────────────────────
+    RegulatoryProfile:
+      type: object
+      required: [id, code, name, version, jurisdiction, effectiveDate, co2Factor, ch4Gwp, n2oGwp, methaneSlipDefault, maxDataGapPct, createdAt]
+      properties:
+        id:
+          type: number
+        code:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        jurisdiction:
+          type: string
+        effectiveDate:
+          type: string
+        co2Factor:
+          type: number
+        ch4Gwp:
+          type: number
+        n2oGwp:
+          type: number
+        methaneSlipDefault:
+          type: number
+        maxDataGapPct:
+          type: number
+        createdAt:
+          type: string
+
+    RegulatoryProfileInput:
+      type: object
+      required: [code, name, version, jurisdiction, effectiveDate, co2Factor, ch4Gwp, n2oGwp, methaneSlipDefault, maxDataGapPct]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        jurisdiction:
+          type: string
+          enum: [FuelEU, IMO_DCS, MARPOL, CII]
+        effectiveDate:
+          type: string
+        co2Factor:
+          type: number
+        ch4Gwp:
+          type: number
+        n2oGwp:
+          type: number
+        methaneSlipDefault:
+          type: number
+        maxDataGapPct:
+          type: number
+
+    # ─── ALERTS ─────────────────────────────────────────────────────────────────
+    Alert:
+      type: object
+      required: [id, vesselId, alertType, severity, message, thresholdPct, currentPct, acknowledged, createdAt]
+      properties:
+        id:
+          type: number
+        vesselId:
+          type: number
+        vesselName:
+          type: ["string", "null"]
+        alertType:
+          type: string
+        severity:
+          type: string
+          enum: [WATCH, LEGAL_WARNING, THRESHOLD_EXCEEDED]
+        message:
+          type: string
+        thresholdPct:
+          type: number
+        currentPct:
+          type: number
+        acknowledged:
+          type: boolean
+        acknowledgedAt:
+          type: ["string", "null"]
+        acknowledgedBy:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    AlertAcknowledge:
+      type: object
+      required: [acknowledgedBy]
+      properties:
+        acknowledgedBy:
+          type: string
+
+    # ─── AUDITOR ────────────────────────────────────────────────────────────────
+    EvidencePackage:
+      type: object
+      required: [vesselId, generatedAt, ledgerEntries, emissionsSummary, chainStatus, decisions]
+      properties:
+        vesselId:
+          type: number
+        generatedAt:
+          type: string
+        ledgerEntries:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerEntry"
+        emissionsSummary:
+          $ref: "#/components/schemas/VesselEmissionsSummary"
+        chainStatus:
+          $ref: "#/components/schemas/ChainStatus"
+        decisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditorDecision"
+
+    AuditorDecision:
+      type: object
+      required: [id, vesselId, evidencePackageHash, decision, rationale, verifierId, createdAt]
+      properties:
+        id:
+          type: number
+        vesselId:
+          type: number
+        evidencePackageHash:
+          type: string
+        decision:
+          type: string
+          enum: [APPROVED, REJECTED, PENDING_CLARIFICATION]
+        rationale:
+          type: string
+        verifierId:
+          type: string
+        createdAt:
+          type: string
+
+    AuditorDecisionInput:
+      type: object
+      required: [vesselId, evidencePackageHash, decision, rationale, verifierId]
+      properties:
+        vesselId:
+          type: number
+        evidencePackageHash:
+          type: string
+        decision:
+          type: string
+          enum: [APPROVED, REJECTED, PENDING_CLARIFICATION]
+        rationale:
+          type: string
+        verifierId:
+          type: string

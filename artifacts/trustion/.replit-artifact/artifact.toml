@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "S³V TRUSTION"
+description = "A sovereign maritime carbon evidence ledger dashboard for cryptographically verifiable vessel emissions compliance. Ingests telemetry, maintains an append-only Merkle-chained ledger, computes multi-gas emissions profiles (CO2, CH4, N2O, CO2e) under FuelEU and IMO DCS, and provides role-based auditor access with materiality guard alerts."
+version = "1.0.0"
+id = "artifacts/trustion"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22139
+
+[services.development]
+run = "pnpm --filter @workspace/trustion run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/trustion", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/trustion/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22139"
+BASE_PATH = "/"
