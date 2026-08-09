@@ -38,7 +38,7 @@ app.use("/api", router);
 
 const frontendPath = path.join(__dirname, "../../trustion/dist");
 app.use(express.static(frontendPath));
-app.get("*", (req, res) => {
+app.get("/{*splat}", (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
 });
 
