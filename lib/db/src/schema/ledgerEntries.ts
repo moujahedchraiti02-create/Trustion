@@ -20,6 +20,7 @@ export const ledgerEntriesTable = pgTable("ledger_entries", {
   prevHash: text("prev_hash"),
   chainHash: text("chain_hash").notNull(),
   signature: text("signature"),
+  publicKey: text("public_key"),
   signerMode: text("signer_mode", { enum: ["TPM2", "SOFTWARE_ED25519", "UNSIGNED"] }).notNull().default("SOFTWARE_ED25519"),
   isEstimated: boolean("is_estimated").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

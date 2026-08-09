@@ -1,0 +1,1 @@
+- [Ledger signing identity](ledger-signing-identity.md) — Ed25519 signatures support a configured persistent secret or a generated process-local key for development.

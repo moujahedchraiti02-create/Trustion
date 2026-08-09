@@ -8,7 +8,7 @@ import {
   GetLedgerEntryResponse,
   GetLedgerChainStatusResponse,
 } from "@workspace/api-zod";
-import { computeRawHash, computeChainHash, buildMerkleProof } from "../lib/crypto";
+import { computeRawHash, computeChainHash, buildMerkleProof, signPayload } from "../lib/crypto";
 
 const router: IRouter = Router();
 
@@ -41,6 +41,7 @@ router.get("/ledger/entries", async (req, res): Promise<void> => {
       prevHash: ledgerEntriesTable.prevHash,
       chainHash: ledgerEntriesTable.chainHash,
       signature: ledgerEntriesTable.signature,
+      publicKey: ledgerEntriesTable.publicKey,
       signerMode: ledgerEntriesTable.signerMode,
       isEstimated: ledgerEntriesTable.isEstimated,
       createdAt: ledgerEntriesTable.createdAt,
@@ -67,6 +68,8 @@ router.post("/ledger/entries", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const data = parsed.data;
+  const { signature: _providedSignature, ...eventPayload } = data;
+  const { signature, publicKey } = signPayload(eventPayload);
 
   // Get previous entry for chain
   const [prev] = await db
@@ -107,8 +110,9 @@ router.post("/ledger/entries", async (req, res): Promise<void> => {
     rawHash,
     prevHash,
     chainHash,
-    signature: data.signature ?? null,
-    signerMode: data.signerMode,
+    signature,
+    publicKey,
+    signerMode: "SOFTWARE_ED25519",
     isEstimated: data.isEstimated ?? false,
     temporalTrust,
   }).returning();
@@ -151,6 +155,7 @@ router.get("/ledger/entries/:id", async (req, res): Promise<void> => {
       prevHash: ledgerEntriesTable.prevHash,
       chainHash: ledgerEntriesTable.chainHash,
       signature: ledgerEntriesTable.signature,
+      publicKey: ledgerEntriesTable.publicKey,
       signerMode: ledgerEntriesTable.signerMode,
       isEstimated: ledgerEntriesTable.isEstimated,
       createdAt: ledgerEntriesTable.createdAt,

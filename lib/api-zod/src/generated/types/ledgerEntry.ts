@@ -33,6 +33,8 @@ export interface LedgerEntry {
   chainHash: string;
   /** @nullable */
   signature?: string | null;
+  /** @nullable */
+  publicKey?: string | null;
   signerMode: LedgerEntrySignerMode;
   isEstimated: boolean;
   createdAt: string;

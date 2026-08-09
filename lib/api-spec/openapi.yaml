@@ -626,6 +626,8 @@ components:
           type: string
         signature:
           type: ["string", "null"]
+        publicKey:
+          type: ["string", "null"]
         signerMode:
           type: string
           enum: [TPM2, SOFTWARE_ED25519, UNSIGNED]
