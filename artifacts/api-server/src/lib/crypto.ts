@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 import nacl from "tweetnacl";
 import naclUtil from "tweetnacl-util";
+import { logger } from "./logger";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 type Payload = Record<string, unknown>;
@@ -44,7 +45,12 @@ const signingKeyPair = configuredSecretKey
         ? nacl.sign.keyPair.fromSeed(secretKey)
         : nacl.sign.keyPair.fromSecretKey(secretKey);
     })()
-  : nacl.sign.keyPair();
+  : (() => {
+      logger.warn(
+        "ED25519_SECRET_KEY_HEX is not configured; using a temporary process-local Ed25519 key. This is NOT suitable for production or regulatory audit.",
+      );
+      return nacl.sign.keyPair();
+    })();
 
 function payloadBytes(payload: Payload): Uint8Array {
   return naclUtil.decodeUTF8(stableStringify(payload));
