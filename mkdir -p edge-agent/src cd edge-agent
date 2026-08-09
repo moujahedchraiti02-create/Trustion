@@ -1,0 +1,1 @@
+touch package.json tsconfig.json src/index.ts src/config.ts src/signer.ts src/modbus-reader.ts src/nmea-reader.ts src/queue.ts src/api-client.ts
