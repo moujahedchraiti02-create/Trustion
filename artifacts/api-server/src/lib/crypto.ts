@@ -21,11 +21,12 @@ function stableStringify(value: unknown): string {
 }
 
 function hexToBytes(hex: string): Uint8Array {
-  if (!/^[0-9a-f]+$/i.test(hex) || hex.length % 2 !== 0) {
+  const normalizedHex = hex.trim().replace(/\s+/g, "").replace(/^0x/i, "");
+  if (!/^[0-9a-f]+$/i.test(normalizedHex) || normalizedHex.length % 2 !== 0) {
     throw new Error("Secret key must be an even-length hexadecimal string.");
   }
 
-  return Uint8Array.from(hex.match(/.{2}/g) ?? [], (byte) => parseInt(byte, 16));
+  return Uint8Array.from(normalizedHex.match(/.{2}/g) ?? [], (byte) => parseInt(byte, 16));
 }
 
 function bytesToHex(bytes: Uint8Array): string {
