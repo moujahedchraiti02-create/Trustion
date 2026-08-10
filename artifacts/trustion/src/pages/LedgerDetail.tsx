@@ -3,8 +3,9 @@ import {
 } from "@workspace/api-client-react";
 import { TrustBadge, SignerBadge } from "@/components/Badges";
 import { HashDisplay } from "@/components/HashDisplay";
+import { Badge } from "@/components/ui/badge";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, Cpu, Activity, CheckCircle2, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Cpu, Activity, CheckCircle2, ShieldAlert, Lock } from "lucide-react";
 import { format } from "date-fns";
 
 export default function LedgerDetail() {
@@ -133,6 +134,31 @@ export default function LedgerDetail() {
                     <span className="text-xs font-mono text-muted-foreground">Signer Mode</span>
                     <SignerBadge mode={entry.signerMode} />
                   </div>
+                  {entry.signature && entry.publicKey ? (
+                    <div className="bg-background border border-green-500/20 p-3 rounded-sm">
+                      <Badge
+                        variant="outline"
+                        className="border-green-500/30 bg-green-500/10 text-green-400 font-mono"
+                      >
+                        <Lock className="w-3 h-3 mr-1.5" />
+                        <span>
+                          <span className="block">Signature Verified</span>
+                          <span className="block text-[10px] font-normal text-green-400/70">
+                            {entry.publicKey.slice(0, 12)}
+                          </span>
+                        </span>
+                      </Badge>
+                    </div>
+                  ) : !entry.signature ? (
+                    <div className="bg-background border border-border p-3 rounded-sm">
+                      <Badge
+                        variant="outline"
+                        className="border-border bg-muted text-muted-foreground font-mono"
+                      >
+                        Unsigned
+                      </Badge>
+                    </div>
+                  ) : null}
                 </div>
                 
                 <div className="flex-1 space-y-3">

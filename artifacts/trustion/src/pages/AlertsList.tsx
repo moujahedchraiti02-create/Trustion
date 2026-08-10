@@ -32,7 +32,7 @@ export default function AlertsList() {
 
   const handleAcknowledge = (id: number) => {
     ackMutation.mutate(
-      { params: { id }, data: { acknowledgedBy: "sys_admin" } },
+      { id, data: { acknowledgedBy: "sys_admin" } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getGetAlertsQueryKey() });
