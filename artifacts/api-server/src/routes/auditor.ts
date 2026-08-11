@@ -9,10 +9,11 @@ import {
 import { sha256 } from "../lib/crypto";
 import { getLedgerChainStatusData } from "./ledger-helpers";
 import { getVesselEmissionsSummaryData } from "./emissions-helpers";
+import { requireApiKey } from "../middleware/auth";
 
 const router: IRouter = Router();
 
-router.get("/auditor/evidence/:vesselId", async (req, res): Promise<void> => {
+router.get("/auditor/evidence/:vesselId", requireApiKey, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.vesselId) ? req.params.vesselId[0] : req.params.vesselId;
   const vesselId = parseInt(raw, 10);
   if (isNaN(vesselId)) { res.status(400).json({ error: "Invalid vesselId" }); return; }
@@ -76,13 +77,13 @@ router.get("/auditor/evidence/:vesselId", async (req, res): Promise<void> => {
   res.json(GetAuditorEvidenceResponse.parse(pkg));
 });
 
-router.get("/auditor/decisions", async (req, res): Promise<void> => {
+router.get("/auditor/decisions", requireApiKey, async (req, res): Promise<void> => {
   const decisions = await db.select().from(auditorDecisionsTable).orderBy(desc(auditorDecisionsTable.createdAt));
   const serialized = decisions.map((d) => ({ ...d, createdAt: d.createdAt.toISOString() }));
   res.json(GetAuditorDecisionsResponse.parse(serialized));
 });
 
-router.post("/auditor/decisions", async (req, res): Promise<void> => {
+router.post("/auditor/decisions", requireApiKey, async (req, res): Promise<void> => {
   const parsed = SubmitAuditorDecisionBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const [decision] = await db.insert(auditorDecisionsTable).values(parsed.data).returning();

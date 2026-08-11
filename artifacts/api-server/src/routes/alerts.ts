@@ -6,6 +6,7 @@ import {
   GetAlertsQueryParams,
   AcknowledgeAlertBody,
 } from "@workspace/api-zod";
+import { requireApiKey } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -49,18 +50,23 @@ router.get("/alerts", async (req, res): Promise<void> => {
   res.json(GetAlertsResponse.parse(serialized));
 });
 
-router.patch("/alerts/:id/acknowledge", async (req, res): Promise<void> => {
+router.patch("/alerts/:id/acknowledge", requireApiKey, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
+  // Validate the body structure but ignore any caller-supplied identity.
+  // The acknowledgedBy value is always derived from the authenticated session,
+  // not from the request body, to prevent audit-trail forgery.
   const parsed = AcknowledgeAlertBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const acknowledgedBy = req.auth!.subject;
 
   const [alert] = await db.update(alertsTable).set({
     acknowledged: true,
     acknowledgedAt: new Date(),
-    acknowledgedBy: parsed.data.acknowledgedBy,
+    acknowledgedBy,
   }).where(eq(alertsTable.id, id)).returning();
 
   if (!alert) { res.status(404).json({ error: "Not found" }); return; }

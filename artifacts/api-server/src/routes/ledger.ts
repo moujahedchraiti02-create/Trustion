@@ -9,6 +9,7 @@ import {
   GetLedgerChainStatusResponse,
 } from "@workspace/api-zod";
 import { computeRawHash, computeChainHash, buildMerkleProof, signPayload } from "../lib/crypto";
+import { requireApiKey } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -63,7 +64,7 @@ router.get("/ledger/entries", async (req, res): Promise<void> => {
   res.json(GetLedgerEntriesResponse.parse(serialized));
 });
 
-router.post("/ledger/entries", async (req, res): Promise<void> => {
+router.post("/ledger/entries", requireApiKey, async (req, res): Promise<void> => {
   const parsed = IngestLedgerEntryBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
