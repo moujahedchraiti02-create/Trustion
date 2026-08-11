@@ -184,6 +184,8 @@ import {
   initRegistryAndActivate,
   retireKeyInRegistry,
   revokeKeyInRegistry,
+  checkAndAlertKeyExpiry,
+  DEFAULT_EXPIRY_WARNING_WINDOW_MS,
   computeKeyId,
   computeKeyFingerprint,
   _reinitForTesting,
@@ -463,6 +465,280 @@ describe("O13 — Caller-forged keyId rejected", () => {
     const { publicKey, keyId } = signPayload(PAYLOAD_A);
     expect(keyId).toBe(computeKeyId(publicKey));
     expect(keyId).toHaveLength(64);
+  });
+});
+
+// ─── Task 14 — Pre-expiry alert check (A14-EXPIRY) ───────────────────────────
+
+describe("A14-EXPIRY — checkAndAlertKeyExpiry inserts a HIGH alert when key is near expiry", () => {
+  it("returns false and inserts no alert when active key has no expiresAt", async () => {
+    _reinitForTesting(SEED_A); // expiresAt = null by default
+    resetMock();
+
+    const result = await checkAndAlertKeyExpiry();
+
+    expect(result).toBe(false);
+    const alertRow = mockCfg.insertedRows.find(
+      (r: unknown) => (r as Record<string, unknown>).alertType === "KEY_EXPIRY_WARNING",
+    );
+    expect(alertRow).toBeUndefined();
+  });
+
+  it("returns false when key expiresAt is beyond the warning window", async () => {
+    _clearRegistryForTesting();
+    resetMock();
+
+    const farFuture = new Date(Date.now() + DEFAULT_EXPIRY_WARNING_WINDOW_MS + 24 * 60 * 60 * 1000);
+    _setRegistryEntryForTesting({
+      keyId: KEY_ID_A, publicKey: PUB_A, fingerprint: computeKeyFingerprint(PUB_A),
+      algorithm: "Ed25519", signingMode: "PERSISTENT_ED25519", status: "ACTIVE",
+      activatedAt: new Date(), retiredAt: null, revokedAt: null,
+      revocationReason: null, expiresAt: farFuture, createdAt: new Date(),
+    });
+    _setActiveKeyId(KEY_ID_A);
+    mockCfg.registryRows = []; // dedup query: no existing alerts
+
+    const result = await checkAndAlertKeyExpiry();
+    expect(result).toBe(false);
+  });
+
+  it("inserts a HIGH KEY_EXPIRY_WARNING alert when key expires within the warning window", async () => {
+    _clearRegistryForTesting();
+    resetMock();
+
+    // Key expiring in 7 days — within default 30-day window
+    const soonExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    _setRegistryEntryForTesting({
+      keyId: KEY_ID_A, publicKey: PUB_A, fingerprint: computeKeyFingerprint(PUB_A),
+      algorithm: "Ed25519", signingMode: "PERSISTENT_ED25519", status: "ACTIVE",
+      activatedAt: new Date(), retiredAt: null, revokedAt: null,
+      revocationReason: null, expiresAt: soonExpiry, createdAt: new Date(),
+    });
+    _setActiveKeyId(KEY_ID_A);
+    mockCfg.registryRows = []; // dedup: no existing unacknowledged warning
+
+    const result = await checkAndAlertKeyExpiry();
+
+    expect(result).toBe(true);
+    const alertRow = mockCfg.insertedRows.find(
+      (r: unknown) => (r as Record<string, unknown>).alertType === "KEY_EXPIRY_WARNING",
+    ) as Record<string, unknown> | undefined;
+    expect(alertRow).toBeDefined();
+    expect(alertRow!.severity).toBe("HIGH");
+    expect(alertRow!.vesselId).toBeNull();
+  });
+
+  it("alert message contains the fingerprint, keyId, and expiresAt timestamp", async () => {
+    _clearRegistryForTesting();
+    resetMock();
+
+    const soonExpiry = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+    _setRegistryEntryForTesting({
+      keyId: KEY_ID_A, publicKey: PUB_A, fingerprint: computeKeyFingerprint(PUB_A),
+      algorithm: "Ed25519", signingMode: "PERSISTENT_ED25519", status: "ACTIVE",
+      activatedAt: new Date(), retiredAt: null, revokedAt: null,
+      revocationReason: null, expiresAt: soonExpiry, createdAt: new Date(),
+    });
+    _setActiveKeyId(KEY_ID_A);
+    mockCfg.registryRows = [];
+
+    await checkAndAlertKeyExpiry();
+
+    const alertRow = mockCfg.insertedRows.find(
+      (r: unknown) => (r as Record<string, unknown>).alertType === "KEY_EXPIRY_WARNING",
+    ) as Record<string, unknown> | undefined;
+    const msg = String(alertRow!.message);
+    expect(msg).toContain(KEY_ID_A);
+    expect(msg).toContain(computeKeyFingerprint(PUB_A));
+    expect(msg).toContain(soonExpiry.toISOString());
+  });
+
+  it("is deduplicated: does not insert a second alert when one already exists (acknowledged=false)", async () => {
+    _clearRegistryForTesting();
+    resetMock();
+
+    const soonExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    _setRegistryEntryForTesting({
+      keyId: KEY_ID_A, publicKey: PUB_A, fingerprint: computeKeyFingerprint(PUB_A),
+      algorithm: "Ed25519", signingMode: "PERSISTENT_ED25519", status: "ACTIVE",
+      activatedAt: new Date(), retiredAt: null, revokedAt: null,
+      revocationReason: null, expiresAt: soonExpiry, createdAt: new Date(),
+    });
+    _setActiveKeyId(KEY_ID_A);
+
+    // Dedup query returns a row → alert already exists
+    mockCfg.registryRows = [{ id: 1 }];
+
+    const result = await checkAndAlertKeyExpiry();
+    expect(result).toBe(false);
+    const alertRow = mockCfg.insertedRows.find(
+      (r: unknown) => (r as Record<string, unknown>).alertType === "KEY_EXPIRY_WARNING",
+    );
+    expect(alertRow).toBeUndefined();
+  });
+
+  it("returns false when no active key exists", async () => {
+    _clearRegistryForTesting();
+    _setActiveKeyId(null);
+    resetMock();
+
+    const result = await checkAndAlertKeyExpiry();
+    expect(result).toBe(false);
+  });
+
+  it("alerts even when key has already expired (past expiresAt)", async () => {
+    _clearRegistryForTesting();
+    resetMock();
+
+    const pastExpiry = new Date(Date.now() - 24 * 60 * 60 * 1000); // expired yesterday
+    _setRegistryEntryForTesting({
+      keyId: KEY_ID_A, publicKey: PUB_A, fingerprint: computeKeyFingerprint(PUB_A),
+      algorithm: "Ed25519", signingMode: "PERSISTENT_ED25519", status: "ACTIVE",
+      activatedAt: new Date(), retiredAt: null, revokedAt: null,
+      revocationReason: null, expiresAt: pastExpiry, createdAt: new Date(),
+    });
+    _setActiveKeyId(KEY_ID_A);
+    mockCfg.registryRows = [];
+
+    const result = await checkAndAlertKeyExpiry();
+    expect(result).toBe(true);
+    const alertRow = mockCfg.insertedRows.find(
+      (r: unknown) => (r as Record<string, unknown>).alertType === "KEY_EXPIRY_WARNING",
+    ) as Record<string, unknown> | undefined;
+    expect(alertRow!.severity).toBe("HIGH");
+    expect(String(alertRow!.message)).toContain("EXPIRED");
+  });
+});
+
+// ─── Task 14 — Key lifecycle alert insertion (A14) ───────────────────────────
+
+describe("A14 — retireKeyInRegistry inserts a HIGH alert with fingerprint", () => {
+  it("alert is inserted with alertType KEY_LIFECYCLE and severity HIGH", async () => {
+    _clearRegistryForTesting();
+    resetMock();
+
+    // Use a cast status that bypasses all early-return guards (ACTIVE/RETIRED/REVOKED)
+    // so the function reaches the DB update + alert insertion path.
+    _setRegistryEntryForTesting({
+      keyId: KEY_ID_A, publicKey: PUB_A, fingerprint: computeKeyFingerprint(PUB_A),
+      algorithm: "Ed25519", signingMode: "PERSISTENT_ED25519",
+      status: "PENDING" as unknown as "ACTIVE",
+      activatedAt: new Date(), retiredAt: null, revokedAt: null,
+      revocationReason: null, createdAt: new Date(),
+    });
+
+    await retireKeyInRegistry(KEY_ID_A, "admin:test", "scheduled retirement");
+
+    // The alert insert comes after the transaction — captured via db.insert().values()
+    const alertRow = mockCfg.insertedRows.find(
+      (r: unknown) => (r as Record<string, unknown>).alertType === "KEY_LIFECYCLE",
+    ) as Record<string, unknown> | undefined;
+    expect(alertRow).toBeDefined();
+    expect(alertRow!.severity).toBe("HIGH");
+    expect(String(alertRow!.message)).toContain(computeKeyFingerprint(PUB_A));
+  });
+
+  it("alert message contains keyId and reason", async () => {
+    _clearRegistryForTesting();
+    resetMock();
+
+    _setRegistryEntryForTesting({
+      keyId: KEY_ID_A, publicKey: PUB_A, fingerprint: computeKeyFingerprint(PUB_A),
+      algorithm: "Ed25519", signingMode: "PERSISTENT_ED25519",
+      status: "PENDING" as unknown as "ACTIVE",
+      activatedAt: new Date(), retiredAt: null, revokedAt: null,
+      revocationReason: null, createdAt: new Date(),
+    });
+
+    await retireKeyInRegistry(KEY_ID_A, "admin:test", "end of lifecycle");
+
+    const alertRow = mockCfg.insertedRows.find(
+      (r: unknown) => (r as Record<string, unknown>).alertType === "KEY_LIFECYCLE",
+    ) as Record<string, unknown> | undefined;
+    expect(String(alertRow!.message)).toContain(KEY_ID_A);
+    expect(String(alertRow!.message)).toContain("end of lifecycle");
+  });
+
+  it("vesselId is null for key-lifecycle alert (system-level, not vessel-specific)", async () => {
+    _clearRegistryForTesting();
+    resetMock();
+
+    _setRegistryEntryForTesting({
+      keyId: KEY_ID_A, publicKey: PUB_A, fingerprint: computeKeyFingerprint(PUB_A),
+      algorithm: "Ed25519", signingMode: "PERSISTENT_ED25519",
+      status: "PENDING" as unknown as "ACTIVE",
+      activatedAt: new Date(), retiredAt: null, revokedAt: null,
+      revocationReason: null, createdAt: new Date(),
+    });
+
+    await retireKeyInRegistry(KEY_ID_A, "admin:test");
+
+    const alertRow = mockCfg.insertedRows.find(
+      (r: unknown) => (r as Record<string, unknown>).alertType === "KEY_LIFECYCLE",
+    ) as Record<string, unknown> | undefined;
+    expect(alertRow!.vesselId).toBeNull();
+  });
+});
+
+describe("A14 — revokeKeyInRegistry inserts a HIGH alert with fingerprint", () => {
+  it("revoke triggers a HIGH severity alert containing the fingerprint", async () => {
+    _reinitForTesting(SEED_A);
+    resetMock();
+
+    await revokeKeyInRegistry(KEY_ID_A, "key compromised in transit", "admin:security");
+
+    const alertRow = mockCfg.insertedRows.find(
+      (r: unknown) => (r as Record<string, unknown>).alertType === "KEY_LIFECYCLE",
+    ) as Record<string, unknown> | undefined;
+    expect(alertRow).toBeDefined();
+    expect(alertRow!.severity).toBe("HIGH");
+    expect(String(alertRow!.message)).toContain(computeKeyFingerprint(PUB_A));
+  });
+
+  it("revoke alert message contains keyId and reason", async () => {
+    _reinitForTesting(SEED_A);
+    resetMock();
+
+    const reason = "suspected compromise — rotating immediately";
+    await revokeKeyInRegistry(KEY_ID_A, reason, "admin:security");
+
+    const alertRow = mockCfg.insertedRows.find(
+      (r: unknown) => (r as Record<string, unknown>).alertType === "KEY_LIFECYCLE",
+    ) as Record<string, unknown> | undefined;
+    expect(String(alertRow!.message)).toContain(KEY_ID_A);
+    expect(String(alertRow!.message)).toContain(reason);
+  });
+
+  it("revoke alert vesselId is null (system-level alert)", async () => {
+    _reinitForTesting(SEED_A);
+    resetMock();
+
+    await revokeKeyInRegistry(KEY_ID_A, "test revocation", "admin:test");
+
+    const alertRow = mockCfg.insertedRows.find(
+      (r: unknown) => (r as Record<string, unknown>).alertType === "KEY_LIFECYCLE",
+    ) as Record<string, unknown> | undefined;
+    expect(alertRow!.vesselId).toBeNull();
+  });
+
+  it("idempotent revoke does not insert a second alert", async () => {
+    _reinitForTesting(SEED_A);
+    resetMock();
+
+    // First revoke — updates status in memory
+    await revokeKeyInRegistry(KEY_ID_A, "first revocation", "admin:test");
+    const firstCount = mockCfg.insertedRows.filter(
+      (r: unknown) => (r as Record<string, unknown>).alertType === "KEY_LIFECYCLE",
+    ).length;
+
+    // Second call is idempotent — returns early, no second alert
+    await revokeKeyInRegistry(KEY_ID_A, "second attempt", "admin:test");
+    const secondCount = mockCfg.insertedRows.filter(
+      (r: unknown) => (r as Record<string, unknown>).alertType === "KEY_LIFECYCLE",
+    ).length;
+
+    expect(firstCount).toBe(1);
+    expect(secondCount).toBe(1); // no additional alert on idempotent call
   });
 });
 

@@ -296,18 +296,22 @@ export const AlertSeverity = {
   WATCH: 'WATCH',
   LEGAL_WARNING: 'LEGAL_WARNING',
   THRESHOLD_EXCEEDED: 'THRESHOLD_EXCEEDED',
+  HIGH: 'HIGH',
 } as const;
 
 export interface Alert {
   id: number;
-  vesselId: number;
+  /** @nullable */
+  vesselId?: number | null;
   /** @nullable */
   vesselName?: string | null;
   alertType: string;
   severity: AlertSeverity;
   message: string;
-  thresholdPct: number;
-  currentPct: number;
+  /** @nullable */
+  thresholdPct?: number | null;
+  /** @nullable */
+  currentPct?: number | null;
   acknowledged: boolean;
   /** @nullable */
   acknowledgedAt?: string | null;
@@ -427,5 +431,6 @@ export const GetAlertsSeverity = {
   WATCH: 'WATCH',
   LEGAL_WARNING: 'LEGAL_WARNING',
   THRESHOLD_EXCEEDED: 'THRESHOLD_EXCEEDED',
+  HIGH: 'HIGH',
 } as const;
 

@@ -67,6 +67,7 @@ export default function AlertsList() {
               </SelectTrigger>
               <SelectContent className="bg-card border-border rounded-sm">
                 <SelectItem value="all" className="font-mono text-xs">ALL_SEVERITIES</SelectItem>
+                <SelectItem value="HIGH" className="font-mono text-xs">HIGH</SelectItem>
                 <SelectItem value="THRESHOLD_EXCEEDED" className="font-mono text-xs">THRESHOLD_EXCEEDED</SelectItem>
                 <SelectItem value="LEGAL_WARNING" className="font-mono text-xs">LEGAL_WARNING</SelectItem>
                 <SelectItem value="WATCH" className="font-mono text-xs">WATCH</SelectItem>
@@ -101,11 +102,13 @@ export default function AlertsList() {
               <div 
                 key={alert.id} 
                 className={`bg-card border rounded-sm overflow-hidden flex flex-col md:flex-row transition-colors ${
-                  !alert.acknowledged && alert.severity === 'THRESHOLD_EXCEEDED' ? 'border-destructive/50 shadow-[0_0_15px_rgba(255,0,0,0.1)]' : 'border-border'
+                  !alert.acknowledged && (alert.severity === 'THRESHOLD_EXCEEDED' || alert.severity === 'HIGH')
+                    ? 'border-destructive/50 shadow-[0_0_15px_rgba(255,0,0,0.1)]'
+                    : 'border-border'
                 }`}
               >
                 <div className={`w-1 md:w-2 shrink-0 ${
-                  alert.severity === 'THRESHOLD_EXCEEDED' ? 'bg-destructive' : 
+                  alert.severity === 'THRESHOLD_EXCEEDED' || alert.severity === 'HIGH' ? 'bg-destructive' : 
                   alert.severity === 'LEGAL_WARNING' ? 'bg-amber-500' : 'bg-blue-500'
                 }`} />
                 
@@ -118,7 +121,11 @@ export default function AlertsList() {
                       </span>
                     </div>
                     <div className="text-xs font-mono">
-                      Vessel: <Link href={`/vessels/${alert.vesselId}`} className="text-primary hover:underline">{alert.vesselName || alert.vesselId}</Link>
+                      {alert.vesselId != null ? (
+                        <>Vessel: <Link href={`/vessels/${alert.vesselId}`} className="text-primary hover:underline">{alert.vesselName || alert.vesselId}</Link></>
+                      ) : (
+                        <span className="text-muted-foreground">SYSTEM</span>
+                      )}
                     </div>
                   </div>
                   
@@ -127,18 +134,20 @@ export default function AlertsList() {
                     <p className="text-muted-foreground text-sm mt-1">{alert.message}</p>
                   </div>
 
-                  <div className="flex items-center gap-4 text-xs font-mono">
-                    <div className="bg-background border border-border px-3 py-1.5 rounded-sm flex items-center gap-2">
-                      <span className="text-muted-foreground">Current:</span>
-                      <span className={alert.currentPct > alert.thresholdPct ? "text-destructive" : "text-foreground"}>
-                        {alert.currentPct.toFixed(1)}%
-                      </span>
+                  {(alert.currentPct != null || alert.thresholdPct != null) && (
+                    <div className="flex items-center gap-4 text-xs font-mono">
+                      <div className="bg-background border border-border px-3 py-1.5 rounded-sm flex items-center gap-2">
+                        <span className="text-muted-foreground">Current:</span>
+                        <span className={(alert.currentPct ?? 0) > (alert.thresholdPct ?? 0) ? "text-destructive" : "text-foreground"}>
+                          {alert.currentPct?.toFixed(1) ?? "—"}%
+                        </span>
+                      </div>
+                      <div className="bg-background border border-border px-3 py-1.5 rounded-sm flex items-center gap-2">
+                        <span className="text-muted-foreground">Threshold:</span>
+                        <span>{alert.thresholdPct?.toFixed(1) ?? "—"}%</span>
+                      </div>
                     </div>
-                    <div className="bg-background border border-border px-3 py-1.5 rounded-sm flex items-center gap-2">
-                      <span className="text-muted-foreground">Threshold:</span>
-                      <span>{alert.thresholdPct.toFixed(1)}%</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 <div className="border-t md:border-t-0 md:border-l border-border p-4 bg-secondary/10 flex items-center justify-center min-w-[160px]">

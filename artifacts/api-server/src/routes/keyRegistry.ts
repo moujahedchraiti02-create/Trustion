@@ -56,6 +56,7 @@ function serialiseEntry(entry: ReturnType<typeof getKeyById>) {
     retiredAt: entry.retiredAt?.toISOString() ?? null,
     revokedAt: entry.revokedAt?.toISOString() ?? null,
     revocationReason: entry.revocationReason ?? null,
+    expiresAt: entry.expiresAt?.toISOString() ?? null,
     createdAt: entry.createdAt.toISOString(),
   };
 }

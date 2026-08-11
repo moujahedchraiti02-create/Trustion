@@ -39,6 +39,12 @@ export const signingKeyRegistryTable = pgTable("signing_key_registry", {
   retiredAt:        timestamp("retired_at", { withTimezone: true }),
   revokedAt:        timestamp("revoked_at", { withTimezone: true }),
   revocationReason: text("revocation_reason"),
+  /**
+   * Optional expiry deadline for this signing key.  When set, the pre-expiry
+   * scheduler (checkAndAlertKeyExpiry) emits a HIGH-severity alert within the
+   * configured warning window before this timestamp.  Null = no scheduled expiry.
+   */
+  expiresAt:        timestamp("expires_at", { withTimezone: true }),
   createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

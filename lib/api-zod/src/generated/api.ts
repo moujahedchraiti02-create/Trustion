@@ -428,19 +428,19 @@ export const GetRegulatoryProfileResponse = zod.object({
  */
 export const GetAlertsQueryParams = zod.object({
   "vesselId": zod.coerce.number().nullish(),
-  "severity": zod.union([zod.literal('WATCH'),zod.literal('LEGAL_WARNING'),zod.literal('THRESHOLD_EXCEEDED'),zod.literal(null)]).nullish(),
+  "severity": zod.union([zod.literal('WATCH'),zod.literal('LEGAL_WARNING'),zod.literal('THRESHOLD_EXCEEDED'),zod.literal('HIGH'),zod.literal(null)]).nullish(),
   "acknowledged": zod.coerce.boolean().nullish()
 })
 
 export const GetAlertsResponseItem = zod.object({
   "id": zod.number(),
-  "vesselId": zod.number(),
+  "vesselId": zod.number().nullable(),
   "vesselName": zod.string().nullish(),
   "alertType": zod.string(),
-  "severity": zod.enum(['WATCH', 'LEGAL_WARNING', 'THRESHOLD_EXCEEDED']),
+  "severity": zod.enum(['WATCH', 'LEGAL_WARNING', 'THRESHOLD_EXCEEDED', 'HIGH']),
   "message": zod.string(),
-  "thresholdPct": zod.number(),
-  "currentPct": zod.number(),
+  "thresholdPct": zod.number().nullable(),
+  "currentPct": zod.number().nullable(),
   "acknowledged": zod.boolean(),
   "acknowledgedAt": zod.string().nullish(),
   "acknowledgedBy": zod.string().nullish(),
@@ -462,13 +462,13 @@ export const AcknowledgeAlertBody = zod.object({
 
 export const AcknowledgeAlertResponse = zod.object({
   "id": zod.number(),
-  "vesselId": zod.number(),
+  "vesselId": zod.number().nullable(),
   "vesselName": zod.string().nullish(),
   "alertType": zod.string(),
-  "severity": zod.enum(['WATCH', 'LEGAL_WARNING', 'THRESHOLD_EXCEEDED']),
+  "severity": zod.enum(['WATCH', 'LEGAL_WARNING', 'THRESHOLD_EXCEEDED', 'HIGH']),
   "message": zod.string(),
-  "thresholdPct": zod.number(),
-  "currentPct": zod.number(),
+  "thresholdPct": zod.number().nullable(),
+  "currentPct": zod.number().nullable(),
   "acknowledged": zod.boolean(),
   "acknowledgedAt": zod.string().nullish(),
   "acknowledgedBy": zod.string().nullish(),

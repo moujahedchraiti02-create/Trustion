@@ -9,14 +9,17 @@ import type { AlertSeverity } from './alertSeverity';
 
 export interface Alert {
   id: number;
-  vesselId: number;
+  /** @nullable */
+  vesselId?: number | null;
   /** @nullable */
   vesselName?: string | null;
   alertType: string;
   severity: AlertSeverity;
   message: string;
-  thresholdPct: number;
-  currentPct: number;
+  /** @nullable */
+  thresholdPct?: number | null;
+  /** @nullable */
+  currentPct?: number | null;
   acknowledged: boolean;
   /** @nullable */
   acknowledgedAt?: string | null;

@@ -13,4 +13,5 @@ export const AlertSeverity = {
   WATCH: 'WATCH',
   LEGAL_WARNING: 'LEGAL_WARNING',
   THRESHOLD_EXCEEDED: 'THRESHOLD_EXCEEDED',
+  HIGH: 'HIGH',
 } as const;

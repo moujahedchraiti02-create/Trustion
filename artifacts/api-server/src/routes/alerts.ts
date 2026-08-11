@@ -75,7 +75,9 @@ router.patch("/alerts/:id/acknowledge", requireOperatorOrAdmin, writeLimiter, as
 
   if (!alert) { res.status(404).json({ error: "Not found" }); return; }
 
-  const [vessel] = await db.select({ name: vesselsTable.name }).from(vesselsTable).where(eq(vesselsTable.id, alert.vesselId));
+  const [vessel] = alert.vesselId != null
+    ? await db.select({ name: vesselsTable.name }).from(vesselsTable).where(eq(vesselsTable.id, alert.vesselId))
+    : [];
 
   res.json({
     ...alert,

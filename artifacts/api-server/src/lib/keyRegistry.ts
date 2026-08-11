@@ -41,9 +41,9 @@
  */
 
 import { createHash } from "crypto";
-import { and, eq, ne, desc } from "drizzle-orm";
+import { and, eq, ne, desc, lt, gte } from "drizzle-orm";
 import { sql } from "drizzle-orm";
-import { db, signingKeyRegistryTable, signingKeyEventsTable } from "@workspace/db";
+import { db, signingKeyRegistryTable, signingKeyEventsTable, alertsTable } from "@workspace/db";
 import { logger } from "./logger.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -65,6 +65,11 @@ export interface KeyRegistryEntry {
   retiredAt: Date | null;
   revokedAt: Date | null;
   revocationReason: string | null;
+  /**
+   * Optional expiry deadline for this key.  When set, checkAndAlertKeyExpiry()
+   * emits a HIGH-severity alert before this timestamp.  Null = no scheduled expiry.
+   */
+  expiresAt: Date | null;
   createdAt: Date;
 }
 
@@ -208,6 +213,7 @@ export async function initRegistryAndActivate(
   fingerprint: string,
   signingMode: string,
   actor: string = "system:startup",
+  expiresAt?: Date | null,
 ): Promise<string> {
   const keyId = computeKeyId(publicKeyHex);
   const now = new Date();
@@ -234,6 +240,16 @@ export async function initRegistryAndActivate(
         { keyId, fingerprint, actor },
         "Signing key already ACTIVE in registry — idempotent restart.",
       );
+
+      // If caller supplies an expiresAt (from SIGNING_KEY_EXPIRES_AT env var),
+      // persist it so the pre-expiry scheduler reflects the latest configuration.
+      if (expiresAt !== undefined) {
+        await tx
+          .update(signingKeyRegistryTable)
+          .set({ expiresAt: expiresAt ?? null })
+          .where(eq(signingKeyRegistryTable.keyId, keyId));
+      }
+
       // Ensure at least one KEY_ACTIVATED event exists for audit continuity.
       const existingEvents = await tx
         .select({ id: signingKeyEventsTable.id })
@@ -308,7 +324,7 @@ export async function initRegistryAndActivate(
       // Key exists as RETIRED — re-activate.
       await tx
         .update(signingKeyRegistryTable)
-        .set({ status: "ACTIVE", activatedAt: now, retiredAt: null })
+        .set({ status: "ACTIVE", activatedAt: now, retiredAt: null, expiresAt: expiresAt ?? null })
         .where(eq(signingKeyRegistryTable.keyId, keyId));
     } else {
       // New key — insert.
@@ -320,6 +336,7 @@ export async function initRegistryAndActivate(
         signingMode,
         status: "ACTIVE",
         activatedAt: now,
+        expiresAt: expiresAt ?? null,
       });
     }
 
@@ -405,10 +422,23 @@ export async function retireKeyInRegistry(
       actor,
       reason: reason ?? null,
     });
+
+    // Alert is inserted inside the same transaction so the status change and the
+    // notification are atomic: either both commit or both roll back.
+    await tx.insert(alertsTable).values({
+      alertType: "KEY_LIFECYCLE",
+      severity: "HIGH",
+      message: `Signing key RETIRED — keyId: ${keyId}, fingerprint: ${entry.fingerprint}` +
+        (reason ? `, reason: ${reason}` : "") +
+        `. Historical signatures remain valid; key can no longer sign new evidence.`,
+      vesselId: null,
+      thresholdPct: null,
+      currentPct: null,
+    });
   });
 
   // Update in-memory map after commit.
-  registryMap.set(keyId, { ...entry, status: "RETIRED", retiredAt: now });
+  registryMap.set(keyId, { ...entry, status: "RETIRED", retiredAt: now, expiresAt: entry.expiresAt ?? null });
 
   logger.info({ keyId, actor }, "Signing key retired.");
 }
@@ -458,6 +488,20 @@ export async function revokeKeyInRegistry(
       actor,
       reason,
     });
+
+    // Alert is inserted inside the same transaction so the revocation and the
+    // HIGH-severity notification are atomic: either both commit or both roll back.
+    await tx.insert(alertsTable).values({
+      alertType: "KEY_LIFECYCLE",
+      severity: "HIGH",
+      message: `Signing key REVOKED — keyId: ${keyId}, fingerprint: ${entry.fingerprint}` +
+        `, reason: ${reason}` +
+        `. Server cannot sign new evidence until a replacement key is activated. ` +
+        `Update ED25519_SECRET_KEY_HEX and restart immediately.`,
+      vesselId: null,
+      thresholdPct: null,
+      currentPct: null,
+    });
   });
 
   // Update in-memory map after commit.
@@ -467,9 +511,81 @@ export async function revokeKeyInRegistry(
     retiredAt,
     revokedAt: now,
     revocationReason: reason,
+    expiresAt: entry.expiresAt ?? null,
   });
 
   logger.warn({ keyId, actor, reason }, "Signing key revoked.");
+}
+
+// ─── Pre-expiry alert check ───────────────────────────────────────────────────
+
+/**
+ * Default warning window: emit an alert when the active key expires within 30 days.
+ */
+export const DEFAULT_EXPIRY_WARNING_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Check whether the active signing key is within the expiry warning window and,
+ * if so, insert a deduplicated HIGH-severity KEY_EXPIRY_WARNING alert.
+ *
+ * Deduplication rule: if any unacknowledged KEY_EXPIRY_WARNING alert already
+ * exists in the alerts table, no second alert is inserted.  Once the operator
+ * acknowledges the alert (confirming awareness), the next scheduler tick will
+ * insert a fresh one if the key is still within the warning window and has not
+ * been rotated.
+ *
+ * Returns true if an alert was inserted, false otherwise.
+ *
+ * Safe to call concurrently or repeatedly — idempotent by deduplication.
+ */
+export async function checkAndAlertKeyExpiry(
+  warningWindowMs: number = DEFAULT_EXPIRY_WARNING_WINDOW_MS,
+): Promise<boolean> {
+  const activeKey = getActiveKey();
+  if (!activeKey || !activeKey.expiresAt) return false;
+
+  const now = new Date();
+  const timeUntilExpiry = activeKey.expiresAt.getTime() - now.getTime();
+
+  // Not yet within the warning window.
+  if (timeUntilExpiry > warningWindowMs) return false;
+
+  // Deduplicate: if an unacknowledged KEY_EXPIRY_WARNING already exists, skip.
+  const existing = await db
+    .select({ id: alertsTable.id })
+    .from(alertsTable)
+    .where(
+      and(
+        eq(alertsTable.alertType, "KEY_EXPIRY_WARNING"),
+        eq(alertsTable.acknowledged, false),
+      ),
+    )
+    .limit(1);
+
+  if (existing.length > 0) return false;
+
+  const daysRemaining = Math.ceil(timeUntilExpiry / (24 * 60 * 60 * 1000));
+  const expiredLabel = timeUntilExpiry <= 0 ? "EXPIRED" : `${daysRemaining} day(s) remaining`;
+
+  await db.insert(alertsTable).values({
+    alertType: "KEY_EXPIRY_WARNING",
+    severity: "HIGH",
+    message:
+      `Signing key approaching expiry — keyId: ${activeKey.keyId}, ` +
+      `fingerprint: ${activeKey.fingerprint}, ` +
+      `expires: ${activeKey.expiresAt.toISOString()}, ` +
+      `${expiredLabel}. ` +
+      `Rotate the signing key before expiry to maintain evidence signing capability.`,
+    vesselId: null,
+    thresholdPct: null,
+    currentPct: null,
+  });
+
+  logger.warn(
+    { keyId: activeKey.keyId, fingerprint: activeKey.fingerprint, expiresAt: activeKey.expiresAt, daysRemaining },
+    "Signing key approaching expiry — KEY_EXPIRY_WARNING alert inserted.",
+  );
+  return true;
 }
 
 // ─── DB load (used after transactions + during restart simulation in tests) ───
@@ -488,6 +604,7 @@ export async function _loadRegistryFromDb(): Promise<void> {
       retiredAt: row.retiredAt ?? null,
       revokedAt: row.revokedAt ?? null,
       revocationReason: row.revocationReason ?? null,
+      expiresAt: row.expiresAt ?? null,
       createdAt: row.createdAt,
     });
   }
@@ -504,9 +621,10 @@ export function _clearRegistryForTesting(): void {
  * Directly set an entry in the in-memory registry, bypassing all DB
  * operations.  Used by _reinitForTesting() and _simulateRotationForTesting()
  * in crypto.ts for pure unit test isolation.
+ * expiresAt defaults to null if not provided (backward-compatible).
  */
-export function _setRegistryEntryForTesting(entry: KeyRegistryEntry): void {
-  registryMap.set(entry.keyId, entry);
+export function _setRegistryEntryForTesting(entry: Omit<KeyRegistryEntry, "expiresAt"> & { expiresAt?: Date | null }): void {
+  registryMap.set(entry.keyId, { ...entry, expiresAt: entry.expiresAt ?? null });
 }
 
 /**
@@ -516,6 +634,6 @@ export function _setRegistryEntryForTesting(entry: KeyRegistryEntry): void {
 export function _retireKeyInMemoryForTesting(keyId: string): void {
   const entry = registryMap.get(keyId);
   if (entry && entry.status === "ACTIVE") {
-    registryMap.set(keyId, { ...entry, status: "RETIRED", retiredAt: new Date() });
+    registryMap.set(keyId, { ...entry, status: "RETIRED", retiredAt: new Date(), expiresAt: entry.expiresAt ?? null });
   }
 }

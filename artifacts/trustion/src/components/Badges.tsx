@@ -3,15 +3,16 @@ import { cn } from "@/lib/utils";
 import { CheckCircle2, AlertTriangle, XCircle, ShieldAlert, Cpu, FileSignature, HelpCircle, Activity } from "lucide-react";
 
 export function SeverityBadge({ severity }: { severity: AlertSeverity }) {
-  const styles = {
+  const styles: Record<AlertSeverity, string> = {
     WATCH: "bg-blue-500/10 text-blue-400 border-blue-500/20",
     LEGAL_WARNING: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-    THRESHOLD_EXCEEDED: "bg-destructive/10 text-destructive border-destructive/20"
+    THRESHOLD_EXCEEDED: "bg-destructive/10 text-destructive border-destructive/20",
+    HIGH: "bg-red-600/20 text-red-400 border-red-600/40",
   };
   
   return (
     <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border", styles[severity])}>
-      {severity.replace("_", " ")}
+      {severity.replace(/_/g, " ")}
     </span>
   );
 }
