@@ -1,0 +1,54 @@
+Proceed with Task #10 — Signing Key Rotation & Historical Verification.
+
+Treat this as a forensic key-lifecycle requirement for S³V TRUSTION. The primary invariant is:
+
+Rotating, retiring, or replacing the active signing key must never make previously valid evidence unverifiable.
+
+Requirements:
+
+1. Introduce a stable key_id for every Ed25519 signing identity. Do not rely only on the fingerprint as the database identifier.
+2. Every newly signed evidence record must persist the key_id identifying the exact signing key used.
+3. Maintain a trusted signing-key registry containing, at minimum:
+    * key_id
+    * public key
+    * fingerprint
+    * algorithm
+    * activation timestamp
+    * retirement timestamp if applicable
+    * status (ACTIVE, RETIRED, REVOKED)
+    * provenance / signing mode where applicable
+4. Private keys must never be stored in the evidence ledger, API responses, frontend, logs, or repository.
+5. Historical verification must resolve the public key by the evidence record’s key_id, not by assuming the currently active key.
+6. Key rotation must preserve old public keys and metadata so historical signatures remain independently verifiable after multiple rotations and server restarts.
+7. Support a controlled rotation workflow with at most one active signing identity for a given signing purpose at a time.
+8. Clearly distinguish RETIREMENT from REVOCATION:
+    * retirement must not invalidate signatures legitimately created while the key was active;
+    * revocation must preserve the historical record and reason/status rather than deleting the key.
+9. Never UPDATE or DELETE historical evidence to migrate it to a new key. Evidence signed with an old key remains associated with that original key permanently.
+10. Key registry/history must itself follow tamper-evident/auditable semantics appropriate to TRUSTION. Do not silently overwrite historical key lifecycle information.
+11. Production must continue to fail closed if no valid active persistent signing key is available.
+12. Do not claim TPM/HSM-backed key custody. Preserve the existing explicit limitation until actual hardware-backed signing is implemented.
+13. Add automated tests covering at minimum:
+
+* evidence signed with key A verifies with key A;
+* rotate A → B;
+* new evidence uses B;
+* old A evidence still verifies after rotation;
+* B cannot verify A signatures and A cannot verify B signatures;
+* server restart preserves verification of both generations;
+* retired key cannot sign new evidence;
+* revoked key cannot sign new evidence;
+* retirement does not invalidate historical signatures;
+* unknown key_id fails verification;
+* malformed registry/key data fails closed;
+* private key material never appears in registry/API/logs/frontend/build artifacts;
+* evidence key_id cannot be caller-forged to misrepresent which key signed it.
+
+14. If zero-downtime/grace-period rotation is implemented, keep signing authority unambiguous: only the designated active key may create new TRUSTION signatures.
+15. Report the exact schema changes, rotation workflow, verification algorithm, authorization requirements for rotation, migration/backward-compatibility behavior, and all remaining limitations.
+
+Run the full test suite, workspace typecheck, security checks, and production build after implementation. Report the exact runner-derived test count.
+
+Do not republish.
+
+Do not implement vessel-scoped EDGE identity or change public-read policy in this task; those will be handled separately after the cryptographic lifecycle is verified.

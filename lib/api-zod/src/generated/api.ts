@@ -200,6 +200,7 @@ export const GetLedgerEntriesResponseItem = zod.object({
   "chainHash": zod.string(),
   "signature": zod.string().nullish(),
   "publicKey": zod.string().nullish(),
+  "keyId": zod.string().nullish(),
   "signerMode": zod.enum(['TPM2', 'SOFTWARE_ED25519', 'UNSIGNED']),
   "isEstimated": zod.boolean(),
   "createdAt": zod.string()
@@ -246,6 +247,7 @@ export const IngestLedgerEntryResponse = zod.object({
   "chainHash": zod.string(),
   "signature": zod.string().nullish(),
   "publicKey": zod.string().nullish(),
+  "keyId": zod.string().nullish(),
   "signerMode": zod.enum(['TPM2', 'SOFTWARE_ED25519', 'UNSIGNED']),
   "isEstimated": zod.boolean(),
   "createdAt": zod.string()
@@ -279,6 +281,7 @@ export const GetLedgerEntryResponse = zod.object({
   "chainHash": zod.string(),
   "signature": zod.string().nullish(),
   "publicKey": zod.string().nullish(),
+  "keyId": zod.string().nullish(),
   "signerMode": zod.enum(['TPM2', 'SOFTWARE_ED25519', 'UNSIGNED']),
   "isEstimated": zod.boolean(),
   "createdAt": zod.string()
@@ -502,6 +505,7 @@ export const GetAuditorEvidenceResponse = zod.object({
   "chainHash": zod.string(),
   "signature": zod.string().nullish(),
   "publicKey": zod.string().nullish(),
+  "keyId": zod.string().nullish(),
   "signerMode": zod.enum(['TPM2', 'SOFTWARE_ED25519', 'UNSIGNED']),
   "isEstimated": zod.boolean(),
   "createdAt": zod.string()

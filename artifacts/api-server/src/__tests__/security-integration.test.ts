@@ -34,6 +34,7 @@ const { mockDb, resetLimitCapture, getCapturedLimit } = vi.hoisted(() => {
       capturedLimit = n;
       return chain;
     },
+    onConflictDoNothing: () => chain,
   };
 
   const mockDb = {
@@ -54,10 +55,11 @@ vi.mock("@workspace/db", () => ({
   db: mockDb,
   alertsTable: {},
   vesselsTable: {},
-  ledgerEntriesTable: {},
+  ledgerEntriesTable: { keyId: {}, publicKey: {} },
   emissionsRecordsTable: {},
   regulatoryProfilesTable: {},
   auditorDecisionsTable: {},
+  signingKeyRegistryTable: { keyId: {} },
 }));
 
 // Import app AFTER vi.mock so the mock is in place

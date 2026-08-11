@@ -1,2 +1,3 @@
 - [Ledger signing identity](ledger-signing-identity.md) — Ed25519 signatures support a configured persistent secret or a generated process-local key for development.
+- [Signing key rotation (Task #10)](key-rotation-task10.md) — key_id/fingerprint distinction, registry architecture, rotation/revocation model, signPayload now returns 3 fields, test isolation pattern.
 - [Workspace manifest integrity](workspace-manifest-integrity.md) — Publishing installs the repo first, so duplicated JSON blocks can fail publishing before app builds run.

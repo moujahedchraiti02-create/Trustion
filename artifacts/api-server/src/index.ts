@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { initRegistry } from "./lib/crypto";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,10 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Load historical signing key entries from DB into the in-memory registry.
+  // This makes verifyPayloadByKeyId() work for entries signed under past keys.
+  initRegistry().catch((e) =>
+    logger.error({ err: e }, "Failed to initialise signing key registry from DB"),
+  );
 });

@@ -23,17 +23,18 @@ import { vi, describe, it, expect, beforeAll, afterAll } from "vitest";
 
 const dbMock = vi.hoisted(() => {
   const chain: Record<string, unknown> & { then: unknown } = {
-    then:     (r: (v: unknown[]) => unknown) => Promise.resolve([]).then(r),
-    catch:    (r: (e: unknown) => unknown)   => Promise.resolve([]).catch(r),
-    finally:  (cb: () => void)               => Promise.resolve([]).finally(cb),
-    from:     () => chain,
-    where:    () => chain,
-    orderBy:  () => chain,
-    leftJoin: () => chain,
-    set:      () => chain,
-    values:   () => chain,
-    returning: () => chain,
-    limit:    () => chain,
+    then:                (r: (v: unknown[]) => unknown) => Promise.resolve([]).then(r),
+    catch:               (r: (e: unknown) => unknown)   => Promise.resolve([]).catch(r),
+    finally:             (cb: () => void)               => Promise.resolve([]).finally(cb),
+    from:                () => chain,
+    where:               () => chain,
+    orderBy:             () => chain,
+    leftJoin:            () => chain,
+    set:                 () => chain,
+    values:              () => chain,
+    returning:           () => chain,
+    limit:               () => chain,
+    onConflictDoNothing: () => chain,
   };
   return {
     db: {
@@ -49,10 +50,11 @@ vi.mock("@workspace/db", () => ({
   ...dbMock,
   alertsTable:              {},
   vesselsTable:             {},
-  ledgerEntriesTable:       {},
+  ledgerEntriesTable:       { keyId: {}, publicKey: {} },
   emissionsRecordsTable:    {},
   regulatoryProfilesTable:  {},
   auditorDecisionsTable:    {},
+  signingKeyRegistryTable:  { keyId: {} },
 }));
 
 // Import app AFTER mock is in place

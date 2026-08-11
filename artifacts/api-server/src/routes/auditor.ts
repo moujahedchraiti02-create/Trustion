@@ -46,6 +46,8 @@ router.get("/auditor/evidence/:vesselId", requireAuditor, async (req, res): Prom
       prevHash: ledgerEntriesTable.prevHash,
       chainHash: ledgerEntriesTable.chainHash,
       signature: ledgerEntriesTable.signature,
+      publicKey: ledgerEntriesTable.publicKey,
+      keyId: ledgerEntriesTable.keyId,
       signerMode: ledgerEntriesTable.signerMode,
       isEstimated: ledgerEntriesTable.isEstimated,
       createdAt: ledgerEntriesTable.createdAt,

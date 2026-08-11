@@ -254,9 +254,9 @@ describe("Test 8 — wrong public key fails verification", () => {
 // ─── Test 9: Private key absent from public outputs ───────────────────────────
 
 describe("Test 9 — private key material never appears in public outputs", () => {
-  it("signPayload() return value has exactly two keys: signature and publicKey", () => {
+  it("signPayload() return value has exactly three keys: signature, publicKey, and keyId", () => {
     const result = signPayload({ vesselId: 1, fuelMassKg: 100 });
-    expect(Object.keys(result).sort()).toEqual(["publicKey", "signature"]);
+    expect(Object.keys(result).sort()).toEqual(["keyId", "publicKey", "signature"]);
   });
 
   it("signPayload().publicKey is 32 bytes (64 hex chars), not the 64-byte full secret", () => {

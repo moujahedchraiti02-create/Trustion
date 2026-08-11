@@ -4,3 +4,4 @@ export * from "./ledgerEntries";
 export * from "./emissionsRecords";
 export * from "./alerts";
 export * from "./auditorDecisions";
+export * from "./signingKeyRegistry";

@@ -8,7 +8,7 @@ import {
   GetLedgerEntryResponse,
   GetLedgerChainStatusResponse,
 } from "@workspace/api-zod";
-import { computeRawHash, computeChainHash, buildMerkleProof, signPayload } from "../lib/crypto";
+import { computeRawHash, computeChainHash, buildMerkleProof, signPayload, verifyPayload } from "../lib/crypto";
 import { requireRole } from "../middleware/auth";
 import { chainStatusLimiter, writeLimiter } from "../middleware/rateLimiter";
 
@@ -58,6 +58,7 @@ router.get("/ledger/entries", async (req, res): Promise<void> => {
       chainHash: ledgerEntriesTable.chainHash,
       signature: ledgerEntriesTable.signature,
       publicKey: ledgerEntriesTable.publicKey,
+      keyId: ledgerEntriesTable.keyId,
       signerMode: ledgerEntriesTable.signerMode,
       isEstimated: ledgerEntriesTable.isEstimated,
       createdAt: ledgerEntriesTable.createdAt,
@@ -85,9 +86,9 @@ router.post("/ledger/entries", requireOperatorOrEdge, writeLimiter, async (req, 
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const data = parsed.data;
-  // Discard any caller-supplied signature — the server always computes its own.
+  // Discard any caller-supplied signature or keyId — the server always computes its own.
   const { signature: _providedSignature, ...eventPayload } = data;
-  const { signature, publicKey } = signPayload(eventPayload);
+  const { signature, publicKey, keyId } = signPayload(eventPayload);
 
   // Get the previous entry to build the chain hash.
   const [prev] = await db
@@ -130,6 +131,7 @@ router.post("/ledger/entries", requireOperatorOrEdge, writeLimiter, async (req, 
     chainHash,
     signature,
     publicKey,
+    keyId,
     signerMode: "SOFTWARE_ED25519",
     isEstimated: data.isEstimated ?? false,
     temporalTrust,
@@ -177,6 +179,7 @@ router.get("/ledger/entries/:id", async (req, res): Promise<void> => {
       chainHash: ledgerEntriesTable.chainHash,
       signature: ledgerEntriesTable.signature,
       publicKey: ledgerEntriesTable.publicKey,
+      keyId: ledgerEntriesTable.keyId,
       signerMode: ledgerEntriesTable.signerMode,
       isEstimated: ledgerEntriesTable.isEstimated,
       createdAt: ledgerEntriesTable.createdAt,

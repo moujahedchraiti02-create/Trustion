@@ -1,46 +1,93 @@
 /**
  * Cryptographic primitives for S³V TRUSTION
  *
- * Signing identity model
- * ─────────────────────
- * Each ledger entry is Ed25519-signed at ingest time.  The public key is stored
- * alongside the entry so any verifier can independently confirm authenticity
- * without access to the server.
+ * Signing identity and key lifecycle model
+ * ─────────────────────────────────────────
+ * Each ledger entry is Ed25519-signed at ingest time.  The public key AND its
+ * stable key_id are stored alongside the entry so any verifier can:
+ *   (a) confirm the signature using the stored public key; and
+ *   (b) look up the key lifecycle status (ACTIVE / RETIRED / REVOKED) in the
+ *       signing key registry.
+ *
+ * Key ID
+ * ──────
+ * key_id = SHA-256(publicKey bytes) as 64 lowercase hex chars.  Computed by
+ * computeKeyId().  It is NOT the fingerprint; the fingerprint is only the
+ * first 16 hex chars of the same hash.
+ *
+ * Rotation model
+ * ──────────────
+ * At most one signing key may be ACTIVE at any time.  Rotation:
+ *   1. Validates the new key (hex format, byte length, sign/verify self-test).
+ *   2. Retires the current ACTIVE key in the registry.
+ *   3. Registers and activates the new key.
+ *   4. Updates the module-level key pair used by signPayload().
+ * Old entries remain associated with their original key_id permanently.
+ * verifyPayload() and verifyPayloadByKeyId() continue to work for all
+ * historical keys regardless of how many rotations have occurred.
  *
  * Key lifecycle limitations (current implementation)
  * ────────────────────────────────────────────────────
  * • PERSISTENT mode (production): ED25519_SECRET_KEY_HEX is a 32-byte seed or
- *   64-byte secret key stored as a Replit Secret.  All instances in a scale-out
- *   deployment share the same key, so every entry carries the same public key.
+ *   64-byte secret key stored as a Replit Secret.  After rotation via the API
+ *   endpoint, the new key is active IN MEMORY only.  For persistence across
+ *   restarts, ED25519_SECRET_KEY_HEX must also be updated before the next
+ *   restart — the server will otherwise reload the env key and auto-retire any
+ *   DB-ACTIVE key that differs.
  *
  * • EPHEMERAL mode (development / test only): a fresh key pair is generated
- *   per process.  Signatures from different sessions use different keys and are
- *   NOT cross-verifiable.  This mode must never be used in production or for
- *   regulatory audit.
+ *   per process.  This mode must never be used in production or for regulatory
+ *   audit.
  *
- * • Key rotation: the system does NOT currently automate key rotation.  Because
- *   each ledger entry stores the full public key used to sign it, entries signed
- *   under a retired key remain verifiable in perpetuity — the verifier uses the
- *   public key embedded in the entry, not the currently active server key.
- *   Manual rotation consists of provisioning a new ED25519_SECRET_KEY_HEX value
- *   and redeploying; entries before the rotation remain verifiable.
+ * • No automated rotation scheduler — rotation is manual via the
+ *   POST /api/key-registry/rotate endpoint (ADMIN role required) or by
+ *   updating ED25519_SECRET_KEY_HEX and restarting.
  *
- * • Key revocation: no revocation mechanism exists.  Compromise of
- *   ED25519_SECRET_KEY_HEX requires manual rotation and out-of-band notification
- *   to auditors to disregard entries signed after the compromise window.
+ * • No revocation list distribution — revoking a key updates the database
+ *   registry; auditors must query the registry to see revocation status.
  *
- * • TPM / HSM: this implementation is software-only.  No TPM or HSM integration
- *   exists.  Private key material lives in process memory for the duration of
- *   the server's lifetime.  "SOFTWARE_ED25519" in signerMode accurately reflects
- *   this; do not claim hardware-backed signing unless real HSM integration is added.
+ * • No TPM / HSM backing — private key material lives in process memory.
+ *   "SOFTWARE_ED25519" in signerMode accurately reflects this; do not claim
+ *   hardware-backed signing unless real HSM integration is added.
+ *
+ * • No cross-instance registry sync beyond the shared PostgreSQL database.
  */
 
 import { createHash } from "crypto";
 import nacl from "tweetnacl";
 import naclUtil from "tweetnacl-util";
-import { logger } from "./logger";
+import { logger } from "./logger.js";
+import {
+  computeKeyId,
+  registerKey,
+  retireKeyInRegistry,
+  revokeKeyInRegistry,
+  getKeyById,
+  listKeys,
+  initRegistry,
+  _clearRegistryForTesting,
+} from "./keyRegistry.js";
+
+// Re-export registry read/init helpers so callers only import from crypto.
+export {
+  computeKeyId,
+  getKeyById,
+  listKeys,
+  initRegistry,
+  retireKeyInRegistry,
+  revokeKeyInRegistry,
+  _clearRegistryForTesting,
+};
+export type { KeyRegistryEntry, KeyStatus } from "./keyRegistry.js";
 
 type Payload = Record<string, unknown>;
+type SigningMode = "PERSISTENT_ED25519" | "EPHEMERAL_DEV_ED25519";
+
+interface SigningIdentity {
+  readonly publicKeyHex: string;
+  readonly fingerprint: string;
+  readonly mode: SigningMode;
+}
 
 // ─── Stable serialisation ────────────────────────────────────────────────────
 
@@ -76,11 +123,7 @@ function bytesToHex(bytes: Uint8Array): string {
  * Derive a compact, non-secret identifier for a public key.
  *
  * Returns the first 8 bytes (16 hex characters) of SHA-256(publicKeyHex).
- * This is safe to log and embed in API responses — it contains no private key
- * material and cannot be reversed to reconstruct the public key.
- *
- * Callers who need full auditability should use the complete publicKey stored
- * in each ledger entry, not the fingerprint.
+ * Use computeKeyId() for the full 32-byte (64 hex char) stable key identifier.
  */
 export function computeKeyFingerprint(publicKeyHex: string): string {
   return createHash("sha256")
@@ -89,43 +132,17 @@ export function computeKeyFingerprint(publicKeyHex: string): string {
     .slice(0, 16);
 }
 
-// ─── Signing identity type ───────────────────────────────────────────────────
-
-export type SigningMode = "PERSISTENT_ED25519" | "EPHEMERAL_DEV_ED25519";
-
-export interface SigningIdentity {
-  /** Hex-encoded Ed25519 public key (32 bytes / 64 hex chars). Non-secret. */
-  readonly publicKeyHex: string;
-  /**
-   * Compact identifier for this signing identity (first 8 bytes of SHA-256
-   * of the public key, 16 hex chars).  Safe to log and expose in APIs.
-   */
-  readonly fingerprint: string;
-  /** Whether this is a persistent production key or an ephemeral dev key. */
-  readonly mode: SigningMode;
-}
-
 // ─── Identity initialisation ─────────────────────────────────────────────────
 
 /**
  * Initialise an Ed25519 signing identity from an optional hex-encoded secret.
- *
- * This function is exported so automated tests can call it directly with
- * controlled inputs without relying on process.env or module-level state.
- *
- * @param secretKeyHex  - Hex string of the 32-byte seed or 64-byte secret key,
- *                        or undefined if not configured.
- * @param isProduction  - When true, throws if secretKeyHex is absent.
- *                        When false, generates an ephemeral key with warnings.
- * @throws {Error}      - Missing key in production, malformed hex, wrong length,
- *                        or sign/verify self-test failure.
+ * Exported for test isolation — tests call this directly with controlled inputs.
  */
 export function initSigningIdentity(
   secretKeyHex: string | undefined,
   isProduction: boolean,
 ): { keyPair: nacl.SignKeyPair; identity: SigningIdentity } {
   if (secretKeyHex) {
-    // ── Validate hex encoding ──────────────────────────────────────────────
     const secretKey = hexToBytes(secretKeyHex);
 
     if (
@@ -140,15 +157,12 @@ export function initSigningIdentity(
       );
     }
 
-    // ── Derive key pair ────────────────────────────────────────────────────
     const keyPair =
       secretKey.length === nacl.sign.seedLength
         ? nacl.sign.keyPair.fromSeed(secretKey)
         : nacl.sign.keyPair.fromSecretKey(secretKey);
 
-    // ── Self-test: sign then verify a known message ────────────────────────
-    // Confirms the key pair is internally consistent and usable before the
-    // server begins accepting ledger ingest requests.
+    // Self-test: sign then verify a known message.
     const testMsg = naclUtil.decodeUTF8("S3V_TRUSTION_KEY_SELFTEST_v1");
     const testSig = nacl.sign.detached(testMsg, keyPair.secretKey);
     if (!nacl.sign.detached.verify(testMsg, testSig, keyPair.publicKey)) {
@@ -161,7 +175,7 @@ export function initSigningIdentity(
     const publicKeyHex = bytesToHex(keyPair.publicKey);
     const fingerprint = computeKeyFingerprint(publicKeyHex);
 
-    // Log identity metadata — NEVER log secretKeyHex or any derived key bytes.
+    // NEVER log secretKeyHex or derived key bytes — fingerprint only.
     logger.info(
       { signingMode: "PERSISTENT_ED25519", keyFingerprint: fingerprint },
       "Ed25519 persistent signing identity loaded and verified.",
@@ -173,7 +187,6 @@ export function initSigningIdentity(
     };
   }
 
-  // ── No key configured ─────────────────────────────────────────────────────
   if (isProduction) {
     throw new Error(
       "[FATAL] ED25519_SECRET_KEY_HEX is not configured. " +
@@ -187,12 +200,11 @@ export function initSigningIdentity(
     );
   }
 
-  // ── Ephemeral key — development / test only ───────────────────────────────
+  // Ephemeral key — development / test only.
   const keyPair = nacl.sign.keyPair();
   const publicKeyHex = bytesToHex(keyPair.publicKey);
   const fingerprint = computeKeyFingerprint(publicKeyHex);
 
-  // Emit a prominent warning so developers never mistake this for production.
   logger.warn(
     {
       signingMode: "EPHEMERAL_DEV_ED25519",
@@ -201,8 +213,6 @@ export function initSigningIdentity(
     },
     "[NON-PERSISTENT / NON-PRODUCTION] Ed25519 signing identity is EPHEMERAL. " +
       "Signatures from this session CANNOT be verified after a server restart. " +
-      "Historical entries signed under a different ephemeral key will fail " +
-      "signature verification. " +
       "Set ED25519_SECRET_KEY_HEX before production use or regulatory audit.",
   );
 
@@ -212,37 +222,48 @@ export function initSigningIdentity(
   };
 }
 
-// ─── Module-level signing identity ───────────────────────────────────────────
-// Initialised once at startup.  Throws immediately if in production and the
-// key is absent, malformed, or fails the self-test.
+// ─── Module-level mutable signing state ──────────────────────────────────────
+// Initialised once at startup; updated by rotateSigningKey().
 
-const {
-  keyPair: _signingKeyPair,
-  identity: _signingIdentity,
-} = initSigningIdentity(
-  process.env.ED25519_SECRET_KEY_HEX,
-  process.env.NODE_ENV === "production",
-);
+let _signingKeyPair: nacl.SignKeyPair;
+let _signingIdentity: SigningIdentity;
+let _activeKeyId: string | null = null;
+
+{
+  const { keyPair, identity } = initSigningIdentity(
+    process.env.ED25519_SECRET_KEY_HEX,
+    process.env.NODE_ENV === "production",
+  );
+  _signingKeyPair = keyPair;
+  _signingIdentity = identity;
+
+  // Register in the in-memory registry (synchronous; DB persistence is async).
+  _activeKeyId = registerKey(identity.publicKeyHex, identity.fingerprint, identity.mode);
+}
+
+// ─── Stable exports (reflect startup identity; use getActiveKeyId() for current) ──
 
 /**
- * Hex-encoded Ed25519 public key for the current signing identity.
- * Safe to include in API responses and logs.
+ * Hex-encoded public key for the signing identity active at startup.
+ * After rotation, the current key can differ — use signPayload().publicKey.
  */
 export const signingPublicKeyHex: string = _signingIdentity.publicKeyHex;
 
 /**
- * Compact fingerprint (first 8 bytes of SHA-256(publicKey) as hex).
- * Use this to identify which key signed a given set of entries without
- * exposing the full public key.
+ * Fingerprint for the signing identity active at startup.
+ * After rotation, use getKeyById(getActiveKeyId()).fingerprint.
  */
 export const signingKeyFingerprint: string = _signingIdentity.fingerprint;
 
 /**
- * Signing mode for the current identity.
- * PERSISTENT_ED25519 = configured via ED25519_SECRET_KEY_HEX (production-safe).
- * EPHEMERAL_DEV_ED25519 = per-process ephemeral key (development/test only).
+ * Signing mode active at startup (PERSISTENT_ED25519 or EPHEMERAL_DEV_ED25519).
  */
 export const signingMode: SigningMode = _signingIdentity.mode;
+
+/** key_id of the currently active signing key; null if the key was revoked. */
+export function getActiveKeyId(): string | null {
+  return _activeKeyId;
+}
 
 // ─── Payload helpers ─────────────────────────────────────────────────────────
 
@@ -253,36 +274,145 @@ function payloadBytes(payload: Payload): Uint8Array {
 // ─── Signing ─────────────────────────────────────────────────────────────────
 
 /**
- * Sign a payload with the server's current Ed25519 signing identity.
+ * Sign a payload with the currently active Ed25519 signing identity.
  *
- * Returns the hex-encoded detached signature and the hex-encoded public key.
- * The public key is stored in the ledger entry so historical records remain
- * verifiable even after key rotation (the verifier uses the stored key, not
- * the current server key).
+ * Returns the hex-encoded detached signature, the hex-encoded public key,
+ * and the key_id.  The public key and key_id are stored in ledger entries so
+ * historical records remain verifiable after rotation — verifiers use the
+ * stored public key, not the current server key.
  *
+ * Throws if no key is currently ACTIVE (e.g. after revocation without rotation).
  * Private key material is never included in the return value.
  */
 export function signPayload(payload: Payload): {
   signature: string;
   publicKey: string;
+  keyId: string;
 } {
+  if (!_activeKeyId) {
+    throw new Error(
+      "No active signing key. The signing key may have been revoked without a " +
+        "replacement. Rotate in a new key before ingesting ledger evidence.",
+    );
+  }
+  const entry = getKeyById(_activeKeyId);
+  if (!entry || entry.status !== "ACTIVE") {
+    throw new Error(
+      `Signing key ${_activeKeyId} is not ACTIVE ` +
+        `(status: ${entry?.status ?? "not found in registry"}). ` +
+        "Cannot create new evidence signatures. Rotate in a replacement key.",
+    );
+  }
   return {
     signature: bytesToHex(
       nacl.sign.detached(payloadBytes(payload), _signingKeyPair.secretKey),
     ),
     publicKey: bytesToHex(_signingKeyPair.publicKey),
+    keyId: _activeKeyId,
   };
 }
 
-// ─── Verification ────────────────────────────────────────────────────────────
+// ─── Key rotation ─────────────────────────────────────────────────────────────
+
+/**
+ * Rotate the active signing key to a new key derived from newSecretKeyHex.
+ *
+ * Steps:
+ *   1. Validate the new key (hex format, byte length, self-test).
+ *   2. Retire the current ACTIVE key in the registry.
+ *   3. Register and activate the new key in the registry.
+ *   4. Update module-level state so signPayload() uses the new key.
+ *
+ * Returns the key_id of the newly activated key.
+ *
+ * NOTE: For persistence across restarts, also update ED25519_SECRET_KEY_HEX
+ * in the deployment environment.  If the server restarts without that update,
+ * the env key is loaded as a new key and the in-memory rotation is lost
+ * (though the registry DB retains the full history).
+ */
+export function rotateSigningKey(newSecretKeyHex: string): string {
+  const { keyPair: newPair, identity: newId } = initSigningIdentity(
+    newSecretKeyHex,
+    false, // rotation call — never production-mode check
+  );
+  const newKeyId = computeKeyId(newId.publicKeyHex);
+
+  // Retire the current active key if it is different.
+  if (_activeKeyId && _activeKeyId !== newKeyId) {
+    const current = getKeyById(_activeKeyId);
+    if (current && current.status === "ACTIVE") {
+      retireKeyInRegistry(_activeKeyId);
+    }
+  }
+
+  // Register (or re-activate if previously retired) the new key.
+  const keyId = registerKey(newId.publicKeyHex, newId.fingerprint, newId.mode);
+
+  // Update module-level state.
+  _signingKeyPair = newPair;
+  _signingIdentity = newId;
+  _activeKeyId = keyId;
+
+  logger.info(
+    { newKeyId: keyId, fingerprint: newId.fingerprint, rotatedFrom: _activeKeyId },
+    "Signing key rotated.",
+  );
+
+  return keyId;
+}
+
+/**
+ * Revoke the currently active signing key.
+ *
+ * After revocation:
+ *   • signPayload() throws — no new evidence can be signed.
+ *   • verifyPayload() and verifyPayloadByKeyId() still work for historical
+ *     records (revocation preserves history, it does not delete it).
+ *   • The registry entry retains the revocation reason for audit.
+ *
+ * Callers MUST rotate in a new key before the server can sign again.
+ */
+export function revokeCurrentSigningKey(reason: string): void {
+  if (!_activeKeyId) {
+    throw new Error("No active signing key to revoke.");
+  }
+  const entry = getKeyById(_activeKeyId);
+  if (!entry) {
+    throw new Error(`Active key ${_activeKeyId} not found in registry — cannot revoke.`);
+  }
+  revokeKeyInRegistry(_activeKeyId, reason);
+  _activeKeyId = null; // prevents further signing until rotation
+  logger.warn(
+    { reason },
+    "Signing key revoked. Server cannot sign new evidence until a replacement key is rotated in.",
+  );
+}
+
+// ─── Test helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Reset signing state to a known key for test isolation.
+ *
+ * Clears the in-memory registry and re-initialises with the given key hex.
+ * The new key is registered as ACTIVE.  NOT for production use.
+ */
+export function _reinitForTesting(keyHex: string): string {
+  _clearRegistryForTesting();
+  const { keyPair, identity } = initSigningIdentity(keyHex, false);
+  const keyId = registerKey(identity.publicKeyHex, identity.fingerprint, identity.mode);
+  _signingKeyPair = keyPair;
+  _signingIdentity = identity;
+  _activeKeyId = keyId;
+  return keyId;
+}
+
+// ─── Verification ─────────────────────────────────────────────────────────────
 
 /**
  * Verify a detached Ed25519 signature against a payload and public key.
  *
- * Always uses the public key embedded in the ledger entry, NOT the current
- * server signing key.  This means verification works correctly for entries
- * signed under a previous key (before rotation) and for entries signed by a
- * different server instance.
+ * Always uses the explicit publicKeyHex argument — NOT the current server key.
+ * This means verification works for any historical key regardless of rotation.
  */
 export function verifyPayload(
   payload: Payload,
@@ -302,6 +432,29 @@ export function verifyPayload(
   } catch {
     return false;
   }
+}
+
+/**
+ * Verify a signature by resolving the public key from the signing key registry.
+ *
+ * Returns false (fails closed) if:
+ *   • keyId is not in the registry (unknown key).
+ *   • The registry entry has malformed or missing public key data.
+ *   • The signature is cryptographically invalid.
+ *
+ * Note on status: RETIRED and REVOKED keys can still verify signatures that
+ * were legitimately created while the key was ACTIVE.  Callers that want to
+ * reject REVOKED-key signatures must check getKeyById(keyId).status separately.
+ */
+export function verifyPayloadByKeyId(
+  payload: Payload,
+  signatureHex: string,
+  keyId: string,
+): boolean {
+  const entry = getKeyById(keyId);
+  if (!entry) return false; // unknown key — fail closed (req 10)
+  if (!entry.publicKey || entry.publicKey.length !== 64) return false; // malformed (req 11)
+  return verifyPayload(payload, signatureHex, entry.publicKey);
 }
 
 // ─── Hash functions ───────────────────────────────────────────────────────────
