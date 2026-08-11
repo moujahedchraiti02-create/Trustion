@@ -8,6 +8,7 @@ import regulatoryRouter from "./regulatory";
 import alertsRouter from "./alerts";
 import auditorRouter from "./auditor";
 import keyRegistryRouter from "./keyRegistry";
+import devicesRouter from "./devices";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(regulatoryRouter);
 router.use(alertsRouter);
 router.use(auditorRouter);
 router.use(keyRegistryRouter);
+router.use(devicesRouter);
 
 export default router;

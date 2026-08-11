@@ -1,0 +1,310 @@
+S³V TRUSTION — TASK #11
+PRODUCTION SMOKE VERIFICATION + EDGE DEVICE IDENTITY & SOURCE SIGNING
+
+MODE: IMPLEMENTATION
+PRIORITY: CRITICAL
+COST DISCIPLINE: HIGH
+DO NOT split this into multiple suggested tasks.
+DO NOT rebuild components that already exist.
+DO NOT perform unrelated UI work, refactoring, SEO, or documentation expansion.
+
+CURRENT VERIFIED BASELINE
+
+Task #10 and its security hardening have been completed and published to production.
+
+Current known state:
+- 188/188 tests passing before the latest merged UI/runbook additions.
+- Build clean.
+- Typecheck clean.
+- Security scan reported 0 critical / 0 high.
+- Production database migrations were generated, validated, approved, and published successfully.
+- Persistent Ed25519 server signing key exists.
+- Signing key registry exists.
+- Signing key lifecycle event history exists.
+- Startup waits for registry initialization before listen.
+- Historical key verification is supported.
+- RBAC exists with OPERATOR, AUDITOR, ADMIN, EDGE_INGEST.
+- Hash-chain functionality already exists using rawHash / prevHash / chainHash and /api/ledger/chain-status.
+- Operator signing-key runbook exists.
+- Auditor signing-key history UI has already been implemented/merged.
+- Do not replace or duplicate any of these.
+
+ARCHITECTURAL CONTEXT
+
+S³V TRUSTION is the first application layer of the broader TRUSTION architecture.
+
+This application layer is focused on maritime carbon evidence, regulatory compliance, auditability, and technically defensible evidence under applicable maritime/international regulatory frameworks.
+
+The current server signature proves that TRUSTION received and committed evidence.
+
+It does NOT by itself prove that a specific vessel/device produced the original measurement.
+
+Task #11 must close that provenance gap.
+
+==================================================
+PHASE A — MINIMAL PRODUCTION SMOKE VERIFICATION
+==================================================
+
+Before modifying architecture, perform a minimal read-only production verification.
+
+Verify only:
+
+1. production health endpoint responds correctly;
+2. signing-key registry is reachable and contains the expected ACTIVE server key;
+3. signing-key event history is readable;
+4. existing ledger read functionality still works;
+5. chain-status verification still works;
+6. no obvious startup/database migration failure exists.
+
+Do NOT mutate production evidence.
+Do NOT rotate/revoke production keys for testing.
+Do NOT expose any secret.
+
+If a production blocker is found, STOP and report it before Task #11 implementation.
+
+If production is healthy, continue immediately to Task #11 in the SAME task.
+
+==================================================
+PHASE B — EDGE DEVICE IDENTITY
+==================================================
+
+Implement a real device identity registry.
+
+Each Edge device must have at minimum:
+
+- deviceId
+- vesselId and/or vessel IMO binding using the existing vessel model
+- keyId
+- Ed25519 publicKey
+- status:
+  ACTIVE
+  RETIRED
+  REVOKED
+- activatedAt
+- retiredAt nullable
+- revokedAt nullable
+- revocationReason nullable
+- createdAt
+
+Security invariants:
+
+1. A device identity is bound to exactly the vessel it is authorized to submit evidence for.
+2. An EDGE_INGEST caller must NOT be able to submit evidence for arbitrary vessels.
+3. Private device keys must NEVER be stored by the central TRUSTION server.
+4. Private device keys must NEVER be accepted through a public API.
+5. keyId must be deterministically derived from the device public key.
+6. Revoked devices cannot submit new evidence.
+7. Historical evidence from a subsequently revoked device remains preserved and cryptographically verifiable with proper revocation context.
+
+Do not implement TPM/HSM hardware integration yet.
+Design the model so TPM/HSM-backed keys can replace software-held Edge keys later without changing the evidence format.
+
+==================================================
+PHASE C — SOURCE-SIGNED EDGE EVIDENCE
+==================================================
+
+Implement source signing.
+
+The Edge/device side must sign the canonical evidence payload BEFORE it reaches the central TRUSTION server.
+
+Required ingest fields should include, using existing names where possible:
+
+- deviceId
+- vessel identity
+- measurement/event payload
+- device timestamp
+- sequence number if not already available
+- device keyId
+- device signature
+
+Define ONE deterministic canonical serialization format.
+
+The signature must cover all security-critical provenance fields required to prevent substitution between:
+- devices,
+- vessels,
+- measurements,
+- timestamps,
+- and sequence positions.
+
+The server must:
+
+1. authenticate the EDGE_INGEST request;
+2. resolve deviceId from the device registry;
+3. enforce vessel binding;
+4. resolve the registered device public key;
+5. verify the device signature BEFORE ledger insertion;
+6. reject invalid signatures;
+7. reject unknown devices;
+8. reject revoked devices for new submissions;
+9. reject vessel/device mismatch;
+10. preserve device provenance with the ledger entry.
+
+IMPORTANT:
+Do not trust a publicKey supplied in the evidence request.
+The authoritative device public key must come from the server-side device registry.
+
+==================================================
+PHASE D — DUAL SIGNATURE / PROVENANCE MODEL
+==================================================
+
+Do NOT remove the existing TRUSTION server signing mechanism.
+
+We now need two distinct cryptographic assertions:
+
+A. SOURCE SIGNATURE
+“This registered Edge device signed this measurement.”
+
+B. TRUSTION RECEIPT/LEDGER SIGNATURE
+“The TRUSTION server accepted and committed this evidence.”
+
+Store enough information to distinguish them unambiguously.
+
+For each new Edge-originated ledger entry, preserve at minimum:
+
+- sourceDeviceId
+- sourceKeyId
+- sourceSignature
+- sourceSigningMode
+- server keyId
+- server signature
+- existing hash-chain fields
+
+Do not label the server signature as proof of sensor origin.
+
+Human OPERATOR submissions must remain distinguishable from Edge-device submissions.
+
+Never silently represent OPERATOR-entered evidence as device-signed evidence.
+
+==================================================
+PHASE E — REPLAY / SEQUENCE DEFENSE
+==================================================
+
+Implement the minimum defensible anti-replay mechanism.
+
+For each device maintain monotonic sequence semantics.
+
+Reject:
+- duplicate sequence numbers;
+- obvious replay of already accepted signed evidence;
+- sequence regressions unless an explicitly modeled recovery/backfill rule allows them.
+
+Do not invent a complex offline synchronization protocol in this task.
+
+If offline/backfill requires a later dedicated design, preserve the schema needed for it and document the limitation accurately.
+
+Concurrency matters:
+ensure two simultaneous submissions cannot both incorrectly pass sequence validation.
+
+==================================================
+PHASE F — AUDITOR VERIFICATION
+==================================================
+
+Extend the existing auditor evidence response so an auditor can determine independently:
+
+- whether evidence was OPERATOR-originated or EDGE-originated;
+- deviceId;
+- vessel binding;
+- source keyId;
+- source public key;
+- source signature;
+- device key status;
+- whether the source signature is cryptographically valid;
+- whether the measurement predates retirement/revocation;
+- server signature/key context;
+- existing hash-chain integrity context.
+
+Do NOT expose private keys.
+
+Do not make unverifiable claims such as “DNV certified”, “FuelEU certified”, or “regulator approved”.
+
+==================================================
+PHASE G — DATABASE INTEGRITY
+==================================================
+
+Use database constraints where appropriate, not only application checks.
+
+At minimum evaluate and implement where safe:
+
+- uniqueness of deviceId;
+- uniqueness of device public key/keyId;
+- valid vessel foreign-key binding;
+- unique device + sequence number for accepted Edge evidence;
+- lifecycle/status consistency.
+
+Do not weaken or replace the existing ledger hash chain.
+
+==================================================
+PHASE H — TESTS
+==================================================
+
+Add focused tests, not redundant test volume.
+
+Required scenarios:
+
+1. valid registered Edge device → accepted;
+2. invalid source signature → rejected;
+3. unknown device → rejected;
+4. device/vessel mismatch → rejected;
+5. revoked device new evidence → rejected;
+6. duplicate sequence/replay → rejected;
+7. OPERATOR submission remains clearly OPERATOR provenance;
+8. Edge submission stores source provenance;
+9. server receipt signature still verifies;
+10. source signature independently verifies;
+11. historical evidence remains verifiable after device retirement;
+12. historical evidence after revocation reports correct temporal revocation context;
+13. concurrent duplicate sequence submissions cannot both succeed;
+14. existing hash-chain tests remain passing;
+15. existing RBAC/key-rotation tests remain passing.
+
+Run the complete test suite, typecheck, and production build.
+
+==================================================
+NON-GOALS FOR TASK #11
+==================================================
+
+Do NOT implement yet:
+
+- Merkle tree / external anchoring;
+- TPM/HSM hardware integration;
+- full offline Edge queue/backfill engine;
+- NMEA/GNSS trust engine;
+- regulatory calculation redesign;
+- blockchain;
+- external identity federation;
+- unrelated dashboard redesign;
+- broad refactoring;
+- new marketing claims.
+
+These belong to later tasks.
+
+==================================================
+DELIVERABLE
+==================================================
+
+Implement Task #11 directly.
+
+At completion report concisely:
+
+1. exact files/schema changed;
+2. device identity model implemented;
+3. exact canonical payload being source-signed;
+4. how vessel binding is enforced;
+5. anti-replay mechanism;
+6. dual-signature storage model;
+7. auditor verification capability;
+8. database constraints;
+9. exact new and total test counts;
+10. build/typecheck result;
+11. any remaining provenance limitations.
+
+Also explicitly answer:
+
+“Can TRUSTION now cryptographically distinguish a human OPERATOR submission from evidence signed by a registered Edge device?”
+
+and
+
+“Can TRUSTION now prove that an Edge submission was signed by the registered device key before central ingestion, without relying on the TRUSTION server signing key?”
+
+Do not create or start additional Suggested Next Tasks after completion.
+Stop and report.

@@ -63,6 +63,7 @@ vi.mock("@workspace/db", () => ({
   auditorDecisionsTable:    {},
   signingKeyRegistryTable:  { keyId: {} },
   signingKeyEventsTable:    { keyId: {}, eventType: {} },
+  edgeDeviceRegistryTable:  { deviceId: {}, vesselId: {}, keyId: {}, publicKey: {}, label: {}, status: {}, activatedAt: {}, retiredAt: {}, revokedAt: {}, revocationReason: {}, createdAt: {} },
 }));
 
 // Import app AFTER mock is in place

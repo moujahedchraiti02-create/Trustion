@@ -6,3 +6,4 @@ export * from "./alerts";
 export * from "./auditorDecisions";
 export * from "./signingKeyRegistry";
 export * from "./signingKeyEvents";
+export * from "./edgeDeviceRegistry";
