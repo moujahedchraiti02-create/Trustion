@@ -1,0 +1,65 @@
+S³V TRUSTION — FORENSIC CHECK ONLY
+DO NOT IMPLEMENT A NEW FEATURE.
+DO NOT REFACTOR.
+DO NOT MODIFY PRODUCTION DATA.
+DO NOT CREATE SUGGESTED NEXT TASKS.
+
+Task #11 is complete and 218/218 tests pass.
+
+Before we proceed further, investigate exactly one issue reported during the production smoke check:
+
+GET /api/ledger/chain-status reports BROKEN at entry 1.
+
+This was described as a pre-existing test-data condition.
+
+I need a precise forensic diagnosis before any further architecture work.
+
+READ ONLY unless a code defect is conclusively identified.
+
+Determine:
+
+1. Which exact ledger entry causes the first chain failure?
+2. Is it:
+   - intentional seed/demo/test data,
+   - legacy data created before the current hash-chain implementation,
+   - malformed data,
+   - incorrect genesis handling,
+   - incorrect ordering,
+   - hash canonicalization mismatch,
+   - or an actual chain implementation defect?
+3. Show the stored:
+   - entry identifier
+   - rawHash
+   - prevHash
+   - chainHash
+   and the recomputed expected values.
+   Do not expose secrets.
+4. State the exact formula/canonical input currently used to calculate rawHash and chainHash.
+5. State how the genesis entry is represented and validated.
+6. Determine whether entries AFTER the broken entry are internally consistent with each other.
+7. Determine whether Task #11 changed any hash-chain behavior. Prove this from code/diff rather than assumption.
+8. Determine whether production contains test/demo evidence that should never have been promoted as production evidence.
+
+IMPORTANT:
+Do NOT delete, rewrite, repair, resequence, or re-hash existing ledger evidence.
+An evidence ledger must never be silently “fixed.”
+
+If the cause is test/demo/legacy data, recommend the safest migration/audit treatment without executing it.
+
+If the cause is an actual code defect, identify the minimal patch required but DO NOT implement it yet.
+
+Run only the minimum checks necessary.
+
+Return a concise report:
+
+CHAIN STATUS:
+FIRST BROKEN ENTRY:
+ROOT CAUSE:
+GENESIS VALID:
+TASK #11 REGRESSION: YES/NO
+LATER CHAIN CONSISTENCY:
+PRODUCTION TEST/DEMO DATA PRESENT: YES/NO/UNKNOWN
+DATA MODIFIED: NO
+RECOMMENDED ACTION:
+
+Stop after the diagnosis.
