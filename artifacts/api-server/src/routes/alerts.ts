@@ -7,6 +7,7 @@ import {
   AcknowledgeAlertBody,
 } from "@workspace/api-zod";
 import { requireApiKey } from "../middleware/auth";
+import { writeLimiter } from "../middleware/rateLimiter";
 
 const router: IRouter = Router();
 
@@ -50,7 +51,7 @@ router.get("/alerts", async (req, res): Promise<void> => {
   res.json(GetAlertsResponse.parse(serialized));
 });
 
-router.patch("/alerts/:id/acknowledge", requireApiKey, async (req, res): Promise<void> => {
+router.patch("/alerts/:id/acknowledge", requireApiKey, writeLimiter, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }

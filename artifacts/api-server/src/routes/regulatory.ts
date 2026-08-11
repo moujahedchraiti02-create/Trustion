@@ -7,6 +7,7 @@ import {
   GetRegulatoryProfileResponse,
 } from "@workspace/api-zod";
 import { requireApiKey } from "../middleware/auth";
+import { writeLimiter } from "../middleware/rateLimiter";
 
 const router: IRouter = Router();
 
@@ -19,7 +20,7 @@ router.get("/regulatory-profiles", async (req, res): Promise<void> => {
   res.json(GetRegulatoryProfilesResponse.parse(serialized));
 });
 
-router.post("/regulatory-profiles", requireApiKey, async (req, res): Promise<void> => {
+router.post("/regulatory-profiles", requireApiKey, writeLimiter, async (req, res): Promise<void> => {
   const parsed = CreateRegulatoryProfileBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const [profile] = await db.insert(regulatoryProfilesTable).values(parsed.data).returning();

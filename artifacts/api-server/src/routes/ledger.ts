@@ -10,6 +10,13 @@ import {
 } from "@workspace/api-zod";
 import { computeRawHash, computeChainHash, buildMerkleProof, signPayload } from "../lib/crypto";
 import { requireApiKey } from "../middleware/auth";
+import { chainStatusLimiter, writeLimiter } from "../middleware/rateLimiter";
+
+/**
+ * Hard server-side ceiling on ledger entry queries.
+ * Exported so tests can assert the cap is respected.
+ */
+export const LEDGER_QUERY_MAX_LIMIT = 500;
 
 const router: IRouter = Router();
 
@@ -18,6 +25,9 @@ router.get("/ledger/entries", async (req, res): Promise<void> => {
   if (!query.success) { res.status(400).json({ error: query.error.message }); return; }
 
   const { vesselId, temporalTrust, limit } = query.data;
+
+  // Enforce a hard server-side ceiling regardless of what the caller requested.
+  const effectiveLimit = Math.min(limit ?? 50, LEDGER_QUERY_MAX_LIMIT);
 
   const conditions = [];
   if (vesselId != null) conditions.push(eq(ledgerEntriesTable.vesselId, vesselId));
@@ -51,7 +61,7 @@ router.get("/ledger/entries", async (req, res): Promise<void> => {
     .leftJoin(vesselsTable, eq(ledgerEntriesTable.vesselId, vesselsTable.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(ledgerEntriesTable.createdAt))
-    .limit(limit ?? 50);
+    .limit(effectiveLimit);
 
   const serialized = entries.map((e) => ({
     ...e,
@@ -64,7 +74,7 @@ router.get("/ledger/entries", async (req, res): Promise<void> => {
   res.json(GetLedgerEntriesResponse.parse(serialized));
 });
 
-router.post("/ledger/entries", requireApiKey, async (req, res): Promise<void> => {
+router.post("/ledger/entries", requireApiKey, writeLimiter, async (req, res): Promise<void> => {
   const parsed = IngestLedgerEntryBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -197,7 +207,7 @@ router.get("/ledger/entries/:id", async (req, res): Promise<void> => {
   res.json(GetLedgerEntryResponse.parse({ entry: serialized, merkleProof, chainValid }));
 });
 
-router.get("/ledger/chain-status", async (req, res): Promise<void> => {
+router.get("/ledger/chain-status", chainStatusLimiter, async (req, res): Promise<void> => {
   const entries = await db.select({
     id: ledgerEntriesTable.id,
     chainHash: ledgerEntriesTable.chainHash,

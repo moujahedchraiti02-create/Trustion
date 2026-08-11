@@ -9,6 +9,7 @@ import {
   GetVesselEmissionsTrendResponse,
 } from "@workspace/api-zod";
 import { requireApiKey } from "../middleware/auth";
+import { writeLimiter } from "../middleware/rateLimiter";
 
 const router: IRouter = Router();
 
@@ -17,7 +18,7 @@ router.get("/vessels", async (req, res): Promise<void> => {
   res.json(GetVesselsResponse.parse(vessels));
 });
 
-router.post("/vessels", requireApiKey, async (req, res): Promise<void> => {
+router.post("/vessels", requireApiKey, writeLimiter, async (req, res): Promise<void> => {
   const parsed = CreateVesselBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });

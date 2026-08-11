@@ -10,6 +10,7 @@ import { sha256 } from "../lib/crypto";
 import { getLedgerChainStatusData } from "./ledger-helpers";
 import { getVesselEmissionsSummaryData } from "./emissions-helpers";
 import { requireApiKey } from "../middleware/auth";
+import { writeLimiter } from "../middleware/rateLimiter";
 
 const router: IRouter = Router();
 
@@ -83,7 +84,7 @@ router.get("/auditor/decisions", requireApiKey, async (req, res): Promise<void> 
   res.json(GetAuditorDecisionsResponse.parse(serialized));
 });
 
-router.post("/auditor/decisions", requireApiKey, async (req, res): Promise<void> => {
+router.post("/auditor/decisions", requireApiKey, writeLimiter, async (req, res): Promise<void> => {
   const parsed = SubmitAuditorDecisionBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const [decision] = await db.insert(auditorDecisionsTable).values(parsed.data).returning();
