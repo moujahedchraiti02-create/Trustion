@@ -87,6 +87,18 @@ export const ledgerEntriesTable = pgTable(
     deviceSequenceNumber: integer("device_sequence_number"),
 
     isEstimated: boolean("is_estimated").notNull().default(false),
+
+    // ── Chain epoch assignment ───────────────────────────────────────────────
+    /**
+     * FK into chain_epochs.epoch_id; null for entries created before epoch
+     * support was introduced (legacy MD5-era entries 1–19) or for entries
+     * submitted when no epoch was OPEN for the vessel.
+     *
+     * Caller cannot choose this value — it is server-derived at ingest time
+     * by locking the current OPEN epoch for the vessel.
+     */
+    chainEpochId: text("chain_epoch_id"),
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

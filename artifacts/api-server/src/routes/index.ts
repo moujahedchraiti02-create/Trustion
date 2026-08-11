@@ -9,6 +9,7 @@ import alertsRouter from "./alerts";
 import auditorRouter from "./auditor";
 import keyRegistryRouter from "./keyRegistry";
 import devicesRouter from "./devices";
+import chainEpochsRouter from "./chainEpochs";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(alertsRouter);
 router.use(auditorRouter);
 router.use(keyRegistryRouter);
 router.use(devicesRouter);
+router.use(chainEpochsRouter);
 
 export default router;

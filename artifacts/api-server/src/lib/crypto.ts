@@ -504,3 +504,103 @@ export function buildMerkleProof(
   }
   return proof;
 }
+
+// ─── Epoch Merkle functions ───────────────────────────────────────────────────
+
+/**
+ * Compute the Merkle root of an ordered set of ledger entries.
+ *
+ * Algorithm (same as buildMerkleProof):
+ *   leaf[i]  = entries[i].chainHash                     (must be 64-char SHA-256 hex)
+ *   parent   = SHA-256(left_hex || right_hex)           (string concatenation)
+ *   odd node = last node is paired with a duplicate of itself
+ *
+ * Returns null for an empty list.
+ */
+export function computeMerkleRoot(entries: { chainHash: string }[]): string | null {
+  if (entries.length === 0) return null;
+  let hashes = entries.map((e) => e.chainHash);
+  while (hashes.length > 1) {
+    const next: string[] = [];
+    for (let i = 0; i < hashes.length; i += 2) {
+      const left = hashes[i];
+      const right = hashes[i + 1] ?? left; // duplicate last node when odd count
+      next.push(sha256(`${left}${right}`));
+    }
+    hashes = next;
+  }
+  return hashes[0];
+}
+
+/**
+ * Build a Merkle inclusion proof with sibling direction for independent verification.
+ *
+ * Returns an ordered array of proof steps.  Each step:
+ *   sibling:   the sibling node hash at that tree level
+ *   direction: "right" → sibling is to the right of the current node
+ *              "left"  → sibling is to the left  of the current node
+ *
+ * Reconstruction (apply each step left→right, starting from the leaf):
+ *   direction === "right": current = SHA-256(current + sibling)
+ *   direction === "left":  current = SHA-256(sibling + current)
+ * Final result must equal the stored Merkle root.
+ *
+ * Returns [] for a single-entry epoch; the leaf itself is the root, and the
+ * empty proof still validates via verifyMerkleProof.
+ */
+export function buildMerkleProofWithDirection(
+  entries: { chainHash: string }[],
+  targetIndex: number,
+): { sibling: string; direction: "left" | "right" }[] {
+  if (entries.length === 0) return [];
+  const proof: { sibling: string; direction: "left" | "right" }[] = [];
+  let idx = targetIndex;
+  let levelHashes = entries.map((e) => e.chainHash);
+
+  while (levelHashes.length > 1) {
+    const next: string[] = [];
+    for (let i = 0; i < levelHashes.length; i += 2) {
+      const left = levelHashes[i];
+      const right = levelHashes[i + 1] ?? left;
+      next.push(sha256(`${left}${right}`));
+    }
+    // idx even → target is a left child; its sibling is to the right.
+    // idx odd  → target is a right child; its sibling is to the left.
+    const direction: "left" | "right" = idx % 2 === 0 ? "right" : "left";
+    const siblingIdx = idx % 2 === 0 ? idx + 1 : idx - 1;
+
+    if (siblingIdx < levelHashes.length) {
+      proof.push({ sibling: levelHashes[siblingIdx], direction });
+    } else {
+      // Target was an odd last node — paired with a duplicate of itself.
+      proof.push({ sibling: levelHashes[idx], direction: "right" });
+    }
+
+    idx = Math.floor(idx / 2);
+    levelHashes = next;
+  }
+  return proof;
+}
+
+/**
+ * Verify a Merkle inclusion proof produced by buildMerkleProofWithDirection.
+ *
+ * @param leaf       chainHash of the entry being proved.
+ * @param proof      proof path returned by buildMerkleProofWithDirection.
+ * @param merkleRoot stored Merkle root of the closed epoch.
+ * @returns true if the proof is valid (leaf is a member at the expected position).
+ */
+export function verifyMerkleProof(
+  leaf: string,
+  proof: { sibling: string; direction: "left" | "right" }[],
+  merkleRoot: string,
+): boolean {
+  let current = leaf;
+  for (const step of proof) {
+    current =
+      step.direction === "right"
+        ? sha256(`${current}${step.sibling}`)
+        : sha256(`${step.sibling}${current}`);
+  }
+  return current === merkleRoot;
+}

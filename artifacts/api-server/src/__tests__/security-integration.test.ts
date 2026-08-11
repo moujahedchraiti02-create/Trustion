@@ -70,6 +70,8 @@ vi.mock("@workspace/db", () => ({
   signingKeyRegistryTable: { keyId: {} },
   signingKeyEventsTable:   { keyId: {}, eventType: {} },
   edgeDeviceRegistryTable: { deviceId: {}, vesselId: {}, keyId: {}, publicKey: {}, label: {}, status: {}, activatedAt: {}, retiredAt: {}, revokedAt: {}, revocationReason: {}, createdAt: {} },
+  chainEpochsTable:        { epochId: {}, vesselId: {}, status: {}, merkleRoot: {}, algorithm: {}, canonicalizationVersion: {}, startEntryId: {}, endEntryId: {}, entryCount: {}, previousEpochRoot: {}, openedAt: {}, closedAt: {}, createdAt: {} },
+  chainEpochEventsTable:   { epochId: {}, eventType: {}, eventTimestamp: {}, metadata: {}, createdAt: {} },
 }));
 
 // Import app AFTER vi.mock so the mock is in place

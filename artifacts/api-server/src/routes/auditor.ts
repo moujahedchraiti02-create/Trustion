@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
-import { db, auditorDecisionsTable, ledgerEntriesTable, emissionsRecordsTable, vesselsTable } from "@workspace/db";
+import { eq, desc, inArray } from "drizzle-orm";
+import { db, auditorDecisionsTable, ledgerEntriesTable, emissionsRecordsTable, vesselsTable, chainEpochsTable } from "@workspace/db";
 import {
   GetAuditorDecisionsResponse,
   SubmitAuditorDecisionBody,
@@ -57,6 +57,8 @@ router.get("/auditor/evidence/:vesselId", requireAuditor, async (req, res): Prom
       sourceSignature: ledgerEntriesTable.sourceSignature,
       sourceSigningMode: ledgerEntriesTable.sourceSigningMode,
       deviceSequenceNumber: ledgerEntriesTable.deviceSequenceNumber,
+      // Chain epoch anchor (null for legacy/pre-epoch entries)
+      chainEpochId: ledgerEntriesTable.chainEpochId,
     })
     .from(ledgerEntriesTable)
     .leftJoin(vesselsTable, eq(ledgerEntriesTable.vesselId, vesselsTable.id))
@@ -73,6 +75,33 @@ router.get("/auditor/evidence/:vesselId", requireAuditor, async (req, res): Prom
   ];
   const deviceMap = await getDevicesByIds(deviceIds);
 
+  // ── Batch-fetch chain epoch records for epoch-assigned entries ────────────
+  const uniqueEpochIds = [
+    ...new Set(
+      entries
+        .map((e) => e.chainEpochId)
+        .filter((id): id is string => id != null),
+    ),
+  ];
+  const epochMap = new Map<
+    string,
+    { status: string; merkleRoot: string | null; algorithm: string }
+  >();
+  if (uniqueEpochIds.length > 0) {
+    const epochs = await db
+      .select({
+        epochId: chainEpochsTable.epochId,
+        status: chainEpochsTable.status,
+        merkleRoot: chainEpochsTable.merkleRoot,
+        algorithm: chainEpochsTable.algorithm,
+      })
+      .from(chainEpochsTable)
+      .where(inArray(chainEpochsTable.epochId, uniqueEpochIds));
+    for (const epoch of epochs) {
+      epochMap.set(epoch.epochId, epoch);
+    }
+  }
+
   // ── Enrich each entry with source provenance verification context ─────────
   const serializedEntries = entries.map((e) => {
     const base = {
@@ -84,12 +113,20 @@ router.get("/auditor/evidence/:vesselId", requireAuditor, async (req, res): Prom
       createdAt: e.createdAt.toISOString(),
     };
 
+    // ── Epoch anchor context (applies to all entries regardless of provenance) ─
+    const epochCtx = e.chainEpochId ? (epochMap.get(e.chainEpochId) ?? null) : null;
+
     // OPERATOR submission — no source device provenance.
     if (!e.sourceDeviceId || !e.sourceSignature || !e.sourceKeyId) {
       return {
         ...base,
         provenanceType: "OPERATOR" as const,
         sourceDevice: null,
+        // Epoch anchor fields — null for LEGACY/unassigned entries
+        chainEpochId: e.chainEpochId ?? null,
+        epochStatus: epochCtx?.status ?? null,
+        epochMerkleRoot: epochCtx?.merkleRoot ?? null,
+        epochAlgorithm: epochCtx?.algorithm ?? null,
       };
     }
 
@@ -142,6 +179,11 @@ router.get("/auditor/evidence/:vesselId", requireAuditor, async (req, res): Prom
         : null,
       sourceSignatureValid,
       signedBeforeDeviceRevocation,
+      // Epoch anchor fields — null for LEGACY/unassigned entries
+      chainEpochId: e.chainEpochId ?? null,
+      epochStatus: epochCtx?.status ?? null,
+      epochMerkleRoot: epochCtx?.merkleRoot ?? null,
+      epochAlgorithm: epochCtx?.algorithm ?? null,
     };
   });
 

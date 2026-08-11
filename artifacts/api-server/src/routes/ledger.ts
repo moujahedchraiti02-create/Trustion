@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, ledgerEntriesTable, vesselsTable } from "@workspace/db";
 import {
@@ -216,13 +216,7 @@ router.post(
         return;
       }
 
-      // 6. Compute chain hash
-      const [prev] = await db
-        .select({ chainHash: ledgerEntriesTable.chainHash })
-        .from(ledgerEntriesTable)
-        .orderBy(desc(ledgerEntriesTable.id))
-        .limit(1);
-      const prevHash = prev?.chainHash ?? null;
+      // 6. Compute raw hash (does not depend on DB)
       const rawHash = computeRawHash({
         vesselId: data.vesselId,
         eventType: data.eventType,
@@ -231,7 +225,6 @@ router.post(
         fuelMassKg: data.fuelMassKg,
         engineLoadPct: data.engineLoadPct,
       });
-      const chainHash = computeChainHash(rawHash, prevHash);
 
       // 7. Classify temporal trust
       const gnssTime = new Date(data.timestampGnss).getTime();
@@ -260,37 +253,57 @@ router.post(
       };
       const { signature, publicKey, keyId } = signPayload(serverSignPayload);
 
-      // 9. Insert with dual-signature provenance
+      // 9. Atomic transaction: epoch assignment + chain linkage + insert.
+      // SELECT FOR UPDATE locks the OPEN epoch row so epoch closure and entry
+      // assignment cannot interleave.  Caller cannot choose chainEpochId.
       try {
-        const [entry] = await db
-          .insert(ledgerEntriesTable)
-          .values({
-            vesselId: data.vesselId,
-            eventType: data.eventType,
-            timestampGnss: new Date(data.timestampGnss),
-            timestampDevice: data.timestampDevice ? new Date(data.timestampDevice) : null,
-            fuelType: data.fuelType,
-            fuelMassKg: data.fuelMassKg,
-            engineLoadPct: data.engineLoadPct,
-            positionLat: data.positionLat ?? null,
-            positionLon: data.positionLon ?? null,
-            rawHash,
-            prevHash,
-            chainHash,
-            signature,
-            publicKey,
-            keyId,
-            signerMode: "SOFTWARE_ED25519",
-            isEstimated: data.isEstimated ?? false,
-            temporalTrust,
-            // Source provenance
-            sourceDeviceId: data.deviceId,
-            sourceKeyId: device.keyId,
-            sourceSignature: data.deviceSignature,
-            sourceSigningMode: "EDGE_ED25519",
-            deviceSequenceNumber: data.deviceSequenceNumber,
-          })
-          .returning();
+        const entry = await db.transaction(async (tx) => {
+          const epochResult = await tx.execute(
+            sql`SELECT epoch_id FROM chain_epochs WHERE vessel_id = ${data.vesselId} AND status = 'OPEN' FOR UPDATE LIMIT 1`,
+          );
+          const chainEpochId: string | null =
+            (epochResult.rows[0] as { epoch_id?: string } | undefined)?.epoch_id ?? null;
+
+          const [prev] = await tx
+            .select({ chainHash: ledgerEntriesTable.chainHash })
+            .from(ledgerEntriesTable)
+            .orderBy(desc(ledgerEntriesTable.id))
+            .limit(1);
+          const prevHash = prev?.chainHash ?? null;
+          const chainHash = computeChainHash(rawHash, prevHash);
+
+          const [inserted] = await tx
+            .insert(ledgerEntriesTable)
+            .values({
+              vesselId: data.vesselId,
+              eventType: data.eventType,
+              timestampGnss: new Date(data.timestampGnss),
+              timestampDevice: data.timestampDevice ? new Date(data.timestampDevice) : null,
+              fuelType: data.fuelType,
+              fuelMassKg: data.fuelMassKg,
+              engineLoadPct: data.engineLoadPct,
+              positionLat: data.positionLat ?? null,
+              positionLon: data.positionLon ?? null,
+              rawHash,
+              prevHash,
+              chainHash,
+              signature,
+              publicKey,
+              keyId,
+              signerMode: "SOFTWARE_ED25519",
+              isEstimated: data.isEstimated ?? false,
+              temporalTrust,
+              // Source provenance
+              sourceDeviceId: data.deviceId,
+              sourceKeyId: device.keyId,
+              sourceSignature: data.deviceSignature,
+              sourceSigningMode: "EDGE_ED25519",
+              deviceSequenceNumber: data.deviceSequenceNumber,
+              chainEpochId,
+            })
+            .returning();
+          return inserted;
+        });
 
         const [vessel] = await db
           .select({ name: vesselsTable.name })
@@ -317,7 +330,7 @@ router.post(
       return;
     }
 
-    // ── OPERATOR path (existing behavior, unchanged) ────────────────────────
+    // ── OPERATOR path (server-assigned chainEpochId) ────────────────────────
     const parsed = IngestLedgerEntryBody.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.message });
@@ -329,13 +342,6 @@ router.post(
     const { signature: _providedSignature, ...eventPayload } = data;
     const { signature, publicKey, keyId } = signPayload(eventPayload as Record<string, unknown>);
 
-    const [prev] = await db
-      .select({ chainHash: ledgerEntriesTable.chainHash, id: ledgerEntriesTable.id })
-      .from(ledgerEntriesTable)
-      .orderBy(desc(ledgerEntriesTable.id))
-      .limit(1);
-
-    const prevHash = prev?.chainHash ?? null;
     const rawHash = computeRawHash({
       vesselId: data.vesselId,
       eventType: data.eventType,
@@ -344,7 +350,6 @@ router.post(
       fuelMassKg: data.fuelMassKg,
       engineLoadPct: data.engineLoadPct,
     });
-    const chainHash = computeChainHash(rawHash, prevHash);
 
     const gnssTime = new Date(data.timestampGnss).getTime();
     const serverTime = Date.now();
@@ -353,35 +358,56 @@ router.post(
     if (diffMs > 24 * 60 * 60 * 1000) temporalTrust = "BACKFILL";
     else if (diffMs > 5 * 60 * 1000) temporalTrust = "DRIFT_WARNING";
 
-    const [entry] = await db
-      .insert(ledgerEntriesTable)
-      .values({
-        vesselId: data.vesselId,
-        eventType: data.eventType,
-        timestampGnss: new Date(data.timestampGnss),
-        timestampDevice: data.timestampDevice ? new Date(data.timestampDevice) : null,
-        fuelType: data.fuelType,
-        fuelMassKg: data.fuelMassKg,
-        engineLoadPct: data.engineLoadPct,
-        positionLat: data.positionLat ?? null,
-        positionLon: data.positionLon ?? null,
-        rawHash,
-        prevHash,
-        chainHash,
-        signature,
-        publicKey,
-        keyId,
-        signerMode: "SOFTWARE_ED25519",
-        isEstimated: data.isEstimated ?? false,
-        temporalTrust,
-        // OPERATOR submissions: no source device provenance
-        sourceDeviceId: null,
-        sourceKeyId: null,
-        sourceSignature: null,
-        sourceSigningMode: null,
-        deviceSequenceNumber: null,
-      })
-      .returning();
+    // Atomic transaction: epoch assignment + chain linkage + insert.
+    // Caller cannot choose chainEpochId — the server derives it from the
+    // current OPEN epoch for this vessel (or null if no epoch is active).
+    const entry = await db.transaction(async (tx) => {
+      const epochResult = await tx.execute(
+        sql`SELECT epoch_id FROM chain_epochs WHERE vessel_id = ${data.vesselId} AND status = 'OPEN' FOR UPDATE LIMIT 1`,
+      );
+      const chainEpochId: string | null =
+        (epochResult.rows[0] as { epoch_id?: string } | undefined)?.epoch_id ?? null;
+
+      const [prev] = await tx
+        .select({ chainHash: ledgerEntriesTable.chainHash, id: ledgerEntriesTable.id })
+        .from(ledgerEntriesTable)
+        .orderBy(desc(ledgerEntriesTable.id))
+        .limit(1);
+      const prevHash = prev?.chainHash ?? null;
+      const chainHash = computeChainHash(rawHash, prevHash);
+
+      const [inserted] = await tx
+        .insert(ledgerEntriesTable)
+        .values({
+          vesselId: data.vesselId,
+          eventType: data.eventType,
+          timestampGnss: new Date(data.timestampGnss),
+          timestampDevice: data.timestampDevice ? new Date(data.timestampDevice) : null,
+          fuelType: data.fuelType,
+          fuelMassKg: data.fuelMassKg,
+          engineLoadPct: data.engineLoadPct,
+          positionLat: data.positionLat ?? null,
+          positionLon: data.positionLon ?? null,
+          rawHash,
+          prevHash,
+          chainHash,
+          signature,
+          publicKey,
+          keyId,
+          signerMode: "SOFTWARE_ED25519",
+          isEstimated: data.isEstimated ?? false,
+          temporalTrust,
+          // OPERATOR submissions: no source device provenance
+          sourceDeviceId: null,
+          sourceKeyId: null,
+          sourceSignature: null,
+          sourceSigningMode: null,
+          deviceSequenceNumber: null,
+          chainEpochId,
+        })
+        .returning();
+      return inserted;
+    });
 
     const [vessel] = await db
       .select({ name: vesselsTable.name })

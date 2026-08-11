@@ -1,0 +1,551 @@
+S³V TRUSTION — TASK #12
+CHAIN EPOCH + MERKLE ANCHORING FOUNDATION
+AUTHORITATIVE IMPLEMENTATION SPECIFICATION
+
+This message IS the authoritative Task #12 specification.
+Do not search previous conversation context for another Task #12 spec.
+Do not ask me to upload or paste another specification.
+
+MODE: IMPLEMENTATION
+PRIORITY: compliance-grade evidence integrity
+COST CONTROL: strict — inspect only files required for this task, reuse existing primitives, avoid unrelated refactors, and execute this as one coordinated task.
+
+CURRENT VERIFIED BASELINE
+
+The project already has:
+- PostgreSQL evidence ledger
+- SHA-256 raw hashes and chain hashes
+- Ed25519 TRUSTION receipt signing
+- signing key registry + append-only key events
+- historical signature verification
+- EDGE device registry and source signatures
+- anti-replay device sequence enforcement
+- OPERATOR and EDGE provenance
+- auditor evidence endpoints
+- existing Merkle helper/buildMerkleProof functionality in crypto.ts
+- passing test suite from Task #11: 218/218
+- clean TypeScript/build before this task
+
+FORENSIC FACT — DO NOT MODIFY
+
+ledger_entries IDs 1–19 are legacy/pre-production seed/demo data from an MD5-era implementation.
+
+They contain 32-character legacy hashes and cause the current SHA-256 chain verifier to report BROKEN at entry 1.
+
+This is known and accepted historical test-data contamination.
+
+ABSOLUTE RULE:
+DO NOT:
+- delete entries 1–19
+- update them
+- re-hash them
+- overwrite their hashes
+- migrate their hashes
+- silently repair them
+- make the verifier pretend they are SHA-256-valid
+
+Task #12 must coexist with this legacy history without mutating it.
+
+Entries created under the current SHA-256 system must remain independently verifiable.
+
+==================================================
+OBJECTIVE
+==================================================
+
+Introduce explicit cryptographic CHAIN EPOCHS and immutable MERKLE ANCHORS so TRUSTION can establish bounded, independently verifiable evidence periods without rewriting historical ledger evidence.
+
+An epoch is an explicitly identified contiguous set of ledger entries governed by one declared hash-chain algorithm/version.
+
+Closing an epoch creates a deterministic Merkle root over its immutable ledger evidence and records an auditable anchor.
+
+This establishes the foundation for later:
+- audit-period sealing
+- voyage/reporting-period anchoring
+- offline evidence packages
+- external/notarial anchoring
+- DNV/class/regulatory verification workflows
+
+Do NOT claim external blockchain, TSA, DNV certification, class approval, or regulatory approval.
+This task builds the internal cryptographic foundation only.
+
+==================================================
+1. DATA MODEL
+==================================================
+
+Create a chain_epochs table with at least:
+
+id
+epochId                stable UUID or equivalent unique identifier
+vesselId               FK to vessel
+algorithm              e.g. "SHA-256"
+canonicalizationVersion
+status                 OPEN | CLOSED
+startEntryId
+endEntryId              nullable while OPEN
+entryCount
+merkleRoot              nullable while OPEN
+previousEpochRoot        nullable for first trusted epoch
+openedAt
+closedAt                 nullable while OPEN
+createdAt
+
+Add appropriate uniqueness/index constraints.
+
+There must never be more than ONE OPEN epoch per vessel.
+
+Enforce this at DB level with an appropriate partial unique index where supported.
+
+Create append-only chain_epoch_events with at least:
+
+id
+epochId
+eventType               EPOCH_OPENED | EPOCH_CLOSED
+eventTimestamp
+metadata
+createdAt
+
+Epoch event history must never be silently rewritten.
+
+Do not place private key material in either table.
+
+==================================================
+2. TRUST BOUNDARY / LEGACY HISTORY
+==================================================
+
+Do NOT automatically absorb legacy entries 1–19 into a SHA-256 epoch.
+
+The system must support establishing a new trusted SHA-256 epoch boundary without modifying those records.
+
+If existing valid SHA-256 entries can be safely included based on deterministic verification, they may be included.
+
+Never classify an entry as SHA-256-valid merely because its stored hash length is 64 characters.
+
+Actual recomputation/verification is required.
+
+If a safe automatic boundary cannot be established, fail explicitly rather than guessing.
+
+Legacy history should remain visible to auditors as legacy/unanchored evidence.
+
+==================================================
+3. EPOCH OPENING
+==================================================
+
+Implement an ADMIN-controlled operation to open an epoch for a vessel.
+
+Example API shape:
+
+POST /api/chain-epochs/open
+
+Input:
+{
+  "vesselId": <id>,
+  "algorithm": "SHA-256",
+  "canonicalizationVersion": "v1"
+}
+
+Requirements:
+
+- ADMIN authorization
+- reject if vessel already has OPEN epoch
+- record deterministic start boundary
+- append EPOCH_OPENED event
+- transactional DB operation
+- no mutation of existing ledger entries
+- return epoch identity and boundary metadata
+
+Do not accept arbitrary Merkle roots or hashes from the client.
+
+==================================================
+4. ASSIGNING NEW EVIDENCE TO AN EPOCH
+==================================================
+
+Add nullable epochId / chainEpochId to ledger_entries.
+
+For all NEW SHA-256 ledger entries after a vessel has an OPEN epoch:
+
+- server determines the OPEN epoch
+- ledger entry is assigned to that epoch
+- caller cannot choose or override epochId
+- hashing/signing behavior from previous tasks remains intact
+
+OPERATOR and EDGE_INGEST must follow the same epoch assignment rule.
+
+Existing rows remain untouched unless assignment can be done without modifying immutable historical evidence.
+
+Prefer no historical ledger mutation.
+
+==================================================
+5. EPOCH CLOSURE
+==================================================
+
+Implement:
+
+POST /api/chain-epochs/:epochId/close
+
+ADMIN only.
+
+Closure must execute transactionally.
+
+Before closure:
+
+1. Load all ledger entries assigned to the epoch in deterministic order.
+2. Require at least one entry.
+3. Recompute and verify every entry's SHA-256 rawHash.
+4. Verify chain linkage inside the epoch.
+5. Fail CLOSED operation if any assigned evidence fails verification.
+6. Determine endEntryId and entryCount from DB — never from client input.
+
+Then build a deterministic Merkle tree.
+
+==================================================
+6. MERKLE LEAF DEFINITION
+==================================================
+
+Do NOT invent a second evidence representation.
+
+Use the immutable cryptographic identity already stored for each ledger entry.
+
+Preferred leaf:
+
+leaf[i] = ledger_entries.chainHash
+
+Before use, validate that each leaf is a valid 64-character SHA-256 hex value.
+
+Merkle tree requirements:
+
+- SHA-256
+- deterministic ordering by ledger entry ID ascending
+- pair adjacent nodes
+- if a level contains an odd node count, duplicate the final node
+- parent = SHA256(left || right)
+
+Use one representation consistently.
+
+If the existing buildMerkleProof/helper already defines compatible semantics, REUSE it rather than implementing a competing algorithm.
+
+If existing semantics differ, preserve backward compatibility and document the chosen epoch algorithm/version explicitly.
+
+==================================================
+7. MERKLE ROOT + EPOCH ANCHOR
+==================================================
+
+On successful closure store:
+
+endEntryId
+entryCount
+merkleRoot
+closedAt
+status = CLOSED
+
+Append EPOCH_CLOSED to chain_epoch_events.
+
+The closing transaction must be atomic:
+either the epoch closure + root + event all commit,
+or none commit.
+
+A CLOSED epoch is immutable.
+
+Do not allow:
+- reopening
+- changing root
+- changing boundaries
+- adding later evidence to it
+
+==================================================
+8. EPOCH-TO-EPOCH LINKING
+==================================================
+
+When opening epoch N+1 for a vessel:
+
+previousEpochRoot should reference the immediately preceding CLOSED trusted epoch's merkleRoot when one exists.
+
+This creates:
+
+Epoch N evidence
+      ↓
+Merkle Root N
+      ↓
+previousEpochRoot in Epoch N+1
+
+Do not use the legacy MD5 chain as a trusted previous root.
+
+First trusted SHA-256 epoch may have:
+
+previousEpochRoot = null
+
+That is valid and explicitly represents the cryptographic trust boundary.
+
+==================================================
+9. VERIFICATION API
+==================================================
+
+Implement read-only endpoints such as:
+
+GET /api/chain-epochs?vesselId=...
+GET /api/chain-epochs/:epochId
+GET /api/chain-epochs/:epochId/verify
+GET /api/chain-epochs/:epochId/proof/:ledgerEntryId
+
+Verification endpoint must independently recompute:
+
+- membership/boundaries
+- raw hashes
+- internal chain linkage
+- Merkle root
+
+Return structured results, for example:
+
+{
+  "epochId": "...",
+  "status": "CLOSED",
+  "algorithm": "SHA-256",
+  "entryCount": 25,
+  "storedMerkleRoot": "...",
+  "computedMerkleRoot": "...",
+  "rawHashesValid": true,
+  "chainValid": true,
+  "merkleRootValid": true,
+  "previousEpochRoot": "...",
+  "valid": true
+}
+
+Do not simply trust the stored merkleRoot.
+
+==================================================
+10. MERKLE INCLUSION PROOF
+==================================================
+
+For a ledger entry belonging to a CLOSED epoch, provide a deterministic Merkle inclusion proof.
+
+Response should contain enough public information for an independent verifier to reproduce verification, including at least:
+
+epochId
+ledgerEntryId
+leaf / chainHash
+leafIndex
+merkleRoot
+algorithm
+proof path containing sibling hash + side/direction
+
+Reuse existing buildMerkleProof infrastructure where compatible.
+
+Implement/retain a verification helper and test proof verification.
+
+Requests for entries outside that epoch must fail clearly.
+
+==================================================
+11. AUDITOR INTEGRATION
+==================================================
+
+Extend auditor evidence output without breaking existing fields.
+
+For each ledger entry expose epoch context where available:
+
+chainEpochId
+epochStatus
+epochMerkleRoot
+epochAlgorithm
+
+For legacy/unassigned evidence return null/explicit legacy context rather than pretending it is anchored.
+
+Auditors must be able to distinguish:
+
+LEGACY / UNANCHORED
+OPEN EPOCH
+CLOSED / MERKLE-ANCHORED
+
+Do not describe an OPEN epoch as cryptographically anchored.
+
+==================================================
+12. SECURITY / AUTHORIZATION
+==================================================
+
+Epoch OPEN and CLOSE:
+ADMIN only.
+
+Epoch registry, verification and proof endpoints:
+read-only roles may access according to the existing auditor/read authorization model.
+
+Never accept from callers:
+- computed merkleRoot
+- previousEpochRoot
+- endEntryId
+- entryCount
+- epoch assignment for ledger ingest
+
+Those values are server-derived.
+
+Use existing rate-limit/security middleware conventions.
+
+==================================================
+13. CONCURRENCY
+==================================================
+
+Protect against:
+
+- two OPEN epochs for same vessel
+- evidence arriving while an epoch is closing
+- two concurrent CLOSE requests
+- evidence being assigned to a CLOSED epoch
+
+Use DB transactions/locking/constraints as appropriate.
+
+Do not rely only on an in-memory mutex.
+
+==================================================
+14. FAILURE BEHAVIOR
+==================================================
+
+Fail closed.
+
+If:
+- DB transaction fails
+- hash verification fails
+- chain verification fails
+- Merkle computation is inconsistent
+- epoch state changed concurrently
+
+then DO NOT produce a CLOSED anchor.
+
+Return explicit errors and preserve previous state.
+
+==================================================
+15. REQUIRED TESTS
+==================================================
+
+Add focused tests, not redundant test explosion.
+
+Cover at minimum:
+
+1. ADMIN opens first trusted SHA-256 epoch.
+2. Non-admin cannot open.
+3. Second OPEN epoch for same vessel rejected.
+4. New OPERATOR evidence auto-assigned to OPEN epoch.
+5. New EDGE evidence auto-assigned to OPEN epoch.
+6. Client cannot choose epoch.
+7. Closing empty epoch rejected.
+8. Valid epoch closes successfully.
+9. Root deterministic for same ordered leaves.
+10. Odd leaf count handled deterministically.
+11. Tampered raw evidence prevents closure.
+12. Broken internal chain prevents closure.
+13. CLOSED epoch cannot be closed again.
+14. New evidence cannot enter CLOSED epoch.
+15. Next epoch references previous CLOSED merkleRoot.
+16. First trusted epoch may have previousEpochRoot=null.
+17. Inclusion proof validates.
+18. Proof for non-member rejected.
+19. Verification recomputes root rather than trusting DB.
+20. Legacy entries 1–19 remain unchanged.
+21. Existing signing/device provenance tests remain passing.
+
+Do not rewrite production evidence just to make tests pass.
+
+==================================================
+16. EXISTING GUARANTEES MUST SURVIVE
+==================================================
+
+Do not regress:
+
+- Ed25519 signing
+- historical key verification
+- signing key registry/event history
+- server startup invariant
+- EDGE source signatures
+- device vessel binding
+- anti-replay
+- device retirement/revocation semantics
+- OPERATOR ingestion
+- existing auditor API
+- rate limits/CORS/security middleware
+- append-only evidence semantics
+
+==================================================
+17. OUT OF SCOPE
+==================================================
+
+Do NOT implement in this task:
+
+- public blockchain anchoring
+- Ethereum
+- Bitcoin/OpenTimestamps
+- external TSA
+- DNV API integration
+- class society certification claims
+- HSM/TPM
+- automatic scheduled epoch closure
+- UI redesign
+- deletion/repair of legacy entries 1–19
+- large unrelated refactors
+
+==================================================
+18. IMPLEMENTATION DISCIPLINE / COST CONTROL
+==================================================
+
+Before editing:
+inspect only the relevant existing schema, ledger hashing, crypto/Merkle helper, ledger route, auditor route, authorization conventions, and relevant tests.
+
+Reuse existing implementation patterns.
+
+Do NOT repeatedly reread the repository.
+Do NOT create multiple exploratory agents for the same problem.
+Do NOT perform unrelated cleanup.
+Do NOT generate presentation assets.
+Do NOT republish/deploy unless required for verification.
+
+Implement in one coordinated pass, then run:
+
+1. DB migration/schema validation
+2. targeted Task #12 tests
+3. full existing test suite
+4. typecheck
+5. production build
+
+Fix only failures caused by this task.
+
+==================================================
+19. ACCEPTANCE CRITERIA
+==================================================
+
+Task #12 is complete only when:
+
+- chain_epochs exists
+- chain_epoch_events exists
+- one-open-epoch-per-vessel enforced
+- new evidence receives server-controlled epoch assignment
+- epoch closure verifies evidence before anchoring
+- deterministic Merkle root stored
+- closed epoch immutable
+- epoch-to-epoch root linkage works
+- independent verification endpoint works
+- inclusion proofs work
+- auditor sees anchoring context
+- legacy entries 1–19 remain byte-for-byte/data-for-data unchanged
+- all previous security/provenance guarantees remain intact
+- targeted tests pass
+- full test suite passes
+- typecheck passes
+- build passes
+
+==================================================
+FINAL REPORT — THEN STOP
+==================================================
+
+At completion report ONLY:
+
+1. files changed/created
+2. DB/schema changes
+3. exact epoch boundary model
+4. exact Merkle leaf + parent formula
+5. concurrency/transaction model
+6. API endpoints
+7. auditor behavior
+8. legacy 1–19 treatment confirmation
+9. targeted/full test counts
+10. typecheck/build results
+11. any genuine remaining limitation
+
+Do not start another suggested task.
+Do not implement external anchoring.
+Do not republish automatically.
+Stop after the Task #12 deliverable report.

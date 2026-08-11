@@ -73,6 +73,7 @@ vi.mock("@workspace/db", () => {
       chainHash: {}, signature: {}, publicKey: {}, keyId: {}, signerMode: {},
       isEstimated: {}, createdAt: {}, sourceDeviceId: {}, sourceKeyId: {},
       sourceSignature: {}, sourceSigningMode: {}, deviceSequenceNumber: {},
+      chainEpochId: {},
     },
     edgeDeviceRegistryTable: {
       deviceId: {}, vesselId: {}, keyId: {}, publicKey: {}, label: {}, status: {},
@@ -85,6 +86,8 @@ vi.mock("@workspace/db", () => {
     regulatoryProfilesTable: {},
     signingKeyRegistryTable: { keyId: {} },
     signingKeyEventsTable: { keyId: {}, eventType: {} },
+    chainEpochsTable:      { epochId: {}, vesselId: {}, status: {}, merkleRoot: {}, algorithm: {}, canonicalizationVersion: {}, startEntryId: {}, endEntryId: {}, entryCount: {}, previousEpochRoot: {}, openedAt: {}, closedAt: {}, createdAt: {} },
+    chainEpochEventsTable: { epochId: {}, eventType: {}, eventTimestamp: {}, metadata: {}, createdAt: {} },
   };
 });
 
