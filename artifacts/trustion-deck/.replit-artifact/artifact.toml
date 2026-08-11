@@ -1,0 +1,28 @@
+kind = "slides"
+previewPath = "/trustion-deck/"
+title = "S³V TRUSTION Deck"
+description = "An Engineering Blueprint presentation explaining S³V TRUSTION, a sovereign maritime carbon evidence ledger for FuelEU Maritime and IMO DCS compliance."
+version = "1.0.0"
+id = "artifacts/trustion-deck"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/trustion-deck/" ]
+localPort = 25425
+
+[services.development]
+run = "pnpm --filter @workspace/trustion-deck run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/trustion-deck", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/trustion-deck/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25425"
+BASE_PATH = "/trustion-deck/"

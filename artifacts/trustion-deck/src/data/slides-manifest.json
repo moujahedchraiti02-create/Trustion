@@ -1,0 +1,66 @@
+[
+  {
+    "id": "7d3c7b36-5f3f-4f0c-8b2c-1a0a9d7f01a1",
+    "position": 1,
+    "filepath": "src/pages/slides/TrustionCover.tsx",
+    "title": "S³V TRUSTION",
+    "description": "A sovereign maritime carbon evidence ledger",
+    "speakerNotes": ""
+  },
+  {
+    "id": "7d3c7b36-5f3f-4f0c-8b2c-1a0a9d7f01a2",
+    "position": 2,
+    "filepath": "src/pages/slides/EvidenceProblem.tsx",
+    "title": "The evidence problem",
+    "description": "Why vessel telemetry needs provenance and temporal trust",
+    "speakerNotes": ""
+  },
+  {
+    "id": "7d3c7b36-5f3f-4f0c-8b2c-1a0a9d7f01a3",
+    "position": 3,
+    "filepath": "src/pages/slides/TelemetryEvidence.tsx",
+    "title": "From telemetry to evidence",
+    "description": "The append-only ingestion path from signal to reviewable record",
+    "speakerNotes": ""
+  },
+  {
+    "id": "7d3c7b36-5f3f-4f0c-8b2c-1a0a9d7f01a4",
+    "position": 4,
+    "filepath": "src/pages/slides/CryptographicIntegrity.tsx",
+    "title": "Cryptographic integrity",
+    "description": "Hash chaining, Merkle proofs, and Ed25519 signatures",
+    "speakerNotes": ""
+  },
+  {
+    "id": "7d3c7b36-5f3f-4f0c-8b2c-1a0a9d7f01a5",
+    "position": 5,
+    "filepath": "src/pages/slides/EmissionsRegulatory.tsx",
+    "title": "Emissions + regulatory intelligence",
+    "description": "Multi-gas calculation and versioned regulatory profiles",
+    "speakerNotes": ""
+  },
+  {
+    "id": "7d3c7b36-5f3f-4f0c-8b2c-1a0a9d7f01a6",
+    "position": 6,
+    "filepath": "src/pages/slides/TemporalTrustMateriality.tsx",
+    "title": "Temporal trust + materiality",
+    "description": "Drift classification and severity-banded alerts",
+    "speakerNotes": ""
+  },
+  {
+    "id": "7d3c7b36-5f3f-4f0c-8b2c-1a0a9d7f01a7",
+    "position": 7,
+    "filepath": "src/pages/slides/AuditorGateway.tsx",
+    "title": "Auditor Gateway",
+    "description": "Read-only evidence packages and append-only verifier decisions",
+    "speakerNotes": ""
+  },
+  {
+    "id": "7d3c7b36-5f3f-4f0c-8b2c-1a0a9d7f01a8",
+    "position": 8,
+    "filepath": "src/pages/slides/SovereignSystem.tsx",
+    "title": "Built as a sovereign evidence system",
+    "description": "The implemented operations console, API, persistence, and signing stack",
+    "speakerNotes": ""
+  }
+]
