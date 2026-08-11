@@ -8,8 +8,11 @@ import {
   GetVesselComplianceResponse,
   GetVesselEmissionsTrendResponse,
 } from "@workspace/api-zod";
-import { requireApiKey } from "../middleware/auth";
+import { requireRole } from "../middleware/auth";
 import { writeLimiter } from "../middleware/rateLimiter";
+
+// OPERATOR and ADMIN may register vessels. AUDITOR and EDGE_INGEST may not.
+const requireOperatorOrAdmin = requireRole("OPERATOR", "ADMIN");
 
 const router: IRouter = Router();
 
@@ -18,7 +21,7 @@ router.get("/vessels", async (req, res): Promise<void> => {
   res.json(GetVesselsResponse.parse(vessels));
 });
 
-router.post("/vessels", requireApiKey, writeLimiter, async (req, res): Promise<void> => {
+router.post("/vessels", requireOperatorOrAdmin, writeLimiter, async (req, res): Promise<void> => {
   const parsed = CreateVesselBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });

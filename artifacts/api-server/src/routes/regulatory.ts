@@ -6,8 +6,11 @@ import {
   CreateRegulatoryProfileBody,
   GetRegulatoryProfileResponse,
 } from "@workspace/api-zod";
-import { requireApiKey } from "../middleware/auth";
+import { requireRole } from "../middleware/auth";
 import { writeLimiter } from "../middleware/rateLimiter";
+
+// Regulatory profile management is a configuration action: ADMIN only.
+const requireAdmin = requireRole("ADMIN");
 
 const router: IRouter = Router();
 
@@ -20,7 +23,7 @@ router.get("/regulatory-profiles", async (req, res): Promise<void> => {
   res.json(GetRegulatoryProfilesResponse.parse(serialized));
 });
 
-router.post("/regulatory-profiles", requireApiKey, writeLimiter, async (req, res): Promise<void> => {
+router.post("/regulatory-profiles", requireAdmin, writeLimiter, async (req, res): Promise<void> => {
   const parsed = CreateRegulatoryProfileBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const [profile] = await db.insert(regulatoryProfilesTable).values(parsed.data).returning();

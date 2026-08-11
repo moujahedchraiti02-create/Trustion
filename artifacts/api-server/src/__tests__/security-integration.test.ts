@@ -2,13 +2,14 @@
  * Security integration tests
  *
  * Tests 6-8 from the Task-7 requirements:
- *   6. Public endpoints remain public only where explicitly intended.
+ *   6. Public endpoints remain public only where explicitly intended;
+ *      protected endpoints require a valid credential for the correct role.
  *   7. Pagination limits cannot exceed the server-side maximum.
  *   8. Rate limiting actually rejects excessive requests.
  *
  * The @workspace/db module is fully mocked so no real database is required.
  */
-import { vi, describe, it, expect, beforeAll, afterEach } from "vitest";
+import { vi, describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 
 // ─── DB mock (hoisted so vi.mock factory can reference it) ──────────────────
 const { mockDb, resetLimitCapture, getCapturedLimit } = vi.hoisted(() => {
@@ -65,16 +66,33 @@ import app from "../app.js";
 import { LEDGER_QUERY_MAX_LIMIT } from "../routes/ledger.js";
 
 // ─── Environment helpers ─────────────────────────────────────────────────────
-const VALID_KEY = "integration-test-key";
 
-function setKey(key: string | undefined) {
-  if (key === undefined) delete process.env.API_KEY;
-  else process.env.API_KEY = key;
-}
+const OPERATOR_KEY    = "integration-test-operator";
+const AUDITOR_KEY     = "integration-test-auditor";
+const ADMIN_KEY       = "integration-test-admin";
+const EDGE_INGEST_KEY = "integration-test-edge";
+
+const savedEnv: Record<string, string | undefined> = {};
+
+beforeAll(() => {
+  for (const k of ["OPERATOR_API_KEY", "AUDITOR_API_KEY", "ADMIN_API_KEY", "EDGE_INGEST_API_KEY"]) {
+    savedEnv[k] = process.env[k];
+  }
+  process.env.OPERATOR_API_KEY    = OPERATOR_KEY;
+  process.env.AUDITOR_API_KEY     = AUDITOR_KEY;
+  process.env.ADMIN_API_KEY       = ADMIN_KEY;
+  process.env.EDGE_INGEST_API_KEY = EDGE_INGEST_KEY;
+});
+
+afterAll(() => {
+  for (const [k, v] of Object.entries(savedEnv)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+});
 
 // ─── Test 6: Public vs protected endpoint access ─────────────────────────────
 describe("Public vs protected route access (test 6)", () => {
-  beforeAll(() => setKey(VALID_KEY));
   afterEach(() => resetLimitCapture());
 
   // --- Explicitly public routes (no auth required) ---
@@ -108,50 +126,76 @@ describe("Public vs protected route access (test 6)", () => {
     expect(res.status).toBe(200);
   });
 
-  // --- Protected auditor reads ---
-  it("GET /api/auditor/evidence/:id requires authentication — 401 without key", async () => {
+  // --- Protected auditor reads require AUDITOR role ---
+  it("GET /api/auditor/evidence/:id requires AUDITOR authentication — 401 without key", async () => {
     const res = await request(app).get("/api/auditor/evidence/1");
     expect(res.status).toBe(401);
   });
 
-  it("GET /api/auditor/decisions requires authentication — 401 without key", async () => {
+  it("GET /api/auditor/decisions requires AUDITOR authentication — 401 without key", async () => {
     const res = await request(app).get("/api/auditor/decisions");
     expect(res.status).toBe(401);
   });
 
-  // --- Protected write operations ---
-  it("POST /api/ledger/entries requires authentication — 401 without key", async () => {
+  // --- Protected write operations require appropriate role ---
+  it("POST /api/ledger/entries requires OPERATOR/EDGE_INGEST — 401 without key", async () => {
     const res = await request(app).post("/api/ledger/entries").send({});
     expect(res.status).toBe(401);
   });
 
-  it("POST /api/vessels requires authentication — 401 without key", async () => {
+  it("POST /api/vessels requires OPERATOR/ADMIN — 401 without key", async () => {
     const res = await request(app).post("/api/vessels").send({});
     expect(res.status).toBe(401);
   });
 
-  it("POST /api/regulatory-profiles requires authentication — 401 without key", async () => {
+  it("POST /api/regulatory-profiles requires ADMIN — 401 without key", async () => {
     const res = await request(app).post("/api/regulatory-profiles").send({});
     expect(res.status).toBe(401);
   });
 
-  it("PATCH /api/alerts/:id/acknowledge requires authentication — 401 without key", async () => {
+  it("PATCH /api/alerts/:id/acknowledge requires OPERATOR/ADMIN — 401 without key", async () => {
     const res = await request(app).patch("/api/alerts/1/acknowledge").send({});
     expect(res.status).toBe(401);
   });
 
-  it("POST /api/auditor/decisions requires authentication — 401 without key", async () => {
+  it("POST /api/auditor/decisions requires AUDITOR — 401 without key", async () => {
     const res = await request(app).post("/api/auditor/decisions").send({});
     expect(res.status).toBe(401);
+  });
+
+  // --- With correct credentials, protected routes are accessible ---
+  it("GET /api/auditor/decisions with AUDITOR key → not 401/403", async () => {
+    const res = await request(app)
+      .get("/api/auditor/decisions")
+      .set("Authorization", `Bearer ${AUDITOR_KEY}`);
+    expect(res.status).not.toBe(401);
+    expect(res.status).not.toBe(403);
+  });
+
+  it("POST /api/vessels with OPERATOR key → not 401/403", async () => {
+    const res = await request(app)
+      .post("/api/vessels")
+      .set("Authorization", `Bearer ${OPERATOR_KEY}`)
+      .send({});
+    expect(res.status).not.toBe(401);
+    expect(res.status).not.toBe(403);
+  });
+
+  it("POST /api/regulatory-profiles with ADMIN key → not 401/403", async () => {
+    const res = await request(app)
+      .post("/api/regulatory-profiles")
+      .set("Authorization", `Bearer ${ADMIN_KEY}`)
+      .send({});
+    expect(res.status).not.toBe(401);
+    expect(res.status).not.toBe(403);
   });
 });
 
 // ─── Test 7: Pagination limit cap ────────────────────────────────────────────
 describe("Pagination limit cap (test 7)", () => {
-  beforeAll(() => setKey(VALID_KEY));
   afterEach(() => resetLimitCapture());
 
-  it(`LEDGER_QUERY_MAX_LIMIT constant is defined and positive`, () => {
+  it("LEDGER_QUERY_MAX_LIMIT constant is defined and positive", () => {
     expect(typeof LEDGER_QUERY_MAX_LIMIT).toBe("number");
     expect(LEDGER_QUERY_MAX_LIMIT).toBeGreaterThan(0);
   });
@@ -180,8 +224,6 @@ describe("Pagination limit cap (test 7)", () => {
 // ─── Test 8: Rate limiting ────────────────────────────────────────────────────
 describe("Rate limiting (test 8)", () => {
   it("rejects requests beyond the write limit with HTTP 429", async () => {
-    // Build a minimal app with a very low write limit (2 per window) to avoid
-    // needing to fire hundreds of real requests in a test.
     const express = (await import("express")).default;
     const { createWriteLimiter } = await import("../middleware/rateLimiter.js");
 
@@ -232,25 +274,29 @@ describe("Rate limiting (test 8)", () => {
     );
 
     const statuses = results.map((r) => r.status);
-    // At least the first 3 should succeed, the 4th should be 429
     expect(statuses.filter((s) => s === 200).length).toBeGreaterThanOrEqual(3);
     expect(statuses).toContain(429);
   });
 
-  it("503 is returned when API_KEY is unset regardless of rate limit state", async () => {
+  it("503 is returned when OPERATOR_API_KEY is unset (fails closed for misconfiguration)", async () => {
     const express = (await import("express")).default;
-    const { requireApiKey } = await import("../middleware/auth.js");
+    const { requireRole } = await import("../middleware/auth.js");
 
     const miniApp = express();
-    miniApp.get("/protected", requireApiKey, (_req, res) => res.json({ ok: true }));
+    const guard = requireRole("OPERATOR");
+    miniApp.get("/protected", guard, (_req, res) => res.json({ ok: true }));
 
-    const original = process.env.API_KEY;
-    delete process.env.API_KEY;
+    const saved = process.env.OPERATOR_API_KEY;
+    delete process.env.OPERATOR_API_KEY;
     try {
-      const res = await request(miniApp).get("/protected");
+      // Must send SOME token so the middleware reaches the 503 check.
+      // Requests with no token return 401 before the config check.
+      const res = await request(miniApp)
+        .get("/protected")
+        .set("Authorization", "Bearer any-dummy-token");
       expect(res.status).toBe(503);
     } finally {
-      if (original !== undefined) process.env.API_KEY = original;
+      if (saved !== undefined) process.env.OPERATOR_API_KEY = saved;
     }
   });
 });

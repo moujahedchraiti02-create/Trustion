@@ -1,0 +1,41 @@
+Proceed with Task #9 — operator/auditor role separation.
+
+This task is security-critical and must implement the S³V TRUSTION Legal Firewall, not just cosmetic route separation.
+
+Requirements:
+
+1. Introduce distinct authenticated identities and authorization roles at minimum for:
+    * OPERATOR
+    * AUDITOR
+    * ADMIN
+    * EDGE_INGEST
+2. Enforce explicit server-side authorization per route. Authentication alone is not sufficient.
+3. Operator must NOT be able to create, approve, modify, or submit verifier/auditor decisions.
+4. Auditor must be able to read the evidence necessary for verification and append verifier decisions, but must NOT be able to mutate original vessel telemetry, ledger evidence, or regulatory source data.
+5. Admin must manage configuration and identities but must NOT automatically inherit authority to create auditor decisions.
+6. EDGE_INGEST must be restricted to evidence ingestion only and must not access auditor or administrative capabilities.
+7. Do not use one shared API_KEY with a role parameter supplied by the caller. Roles and identities must be derived from trusted server-side credentials/configuration.
+8. Fail closed for unknown, missing, disabled, or unauthorized identities.
+9. Every authenticated action must have a stable server-derived actor identity suitable for audit logging; remove the static “Authorized Operator” identity.
+10. Auditor decisions must record the authenticated auditor identity and must never trust caller-supplied identity fields.
+11. Preserve append-only evidence semantics. No role may silently UPDATE or DELETE historical evidence.
+12. Add automated authorization tests covering at minimum:
+
+* unauthenticated access denied where required;
+* OPERATOR can perform allowed operator actions;
+* OPERATOR cannot write auditor decisions;
+* AUDITOR can read auditor evidence;
+* AUDITOR can append auditor decision;
+* AUDITOR cannot write ledger evidence or vessel operational records;
+* ADMIN cannot write auditor decisions unless explicitly and separately granted auditor authority;
+* EDGE_INGEST can ingest evidence but cannot use operator/admin/auditor endpoints;
+* caller-supplied role or identity cannot escalate privileges;
+* disabled/unknown credential fails closed;
+* audit records use the server-derived actor identity.
+
+13. Report the exact authorization matrix implemented.
+14. Report any remaining limitations, especially whether credentials are still static secrets, whether expiry/revocation exists, and whether production identity federation is still unimplemented.
+
+Do not republish after implementation.
+
+Run full tests, typecheck, security checks, and production build, and report exact test counts and any remaining findings.

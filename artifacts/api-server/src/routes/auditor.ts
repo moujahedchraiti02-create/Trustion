@@ -9,12 +9,17 @@ import {
 import { sha256 } from "../lib/crypto";
 import { getLedgerChainStatusData } from "./ledger-helpers";
 import { getVesselEmissionsSummaryData } from "./emissions-helpers";
-import { requireApiKey } from "../middleware/auth";
+import { requireRole } from "../middleware/auth";
 import { writeLimiter } from "../middleware/rateLimiter";
 
 const router: IRouter = Router();
 
-router.get("/auditor/evidence/:vesselId", requireApiKey, async (req, res): Promise<void> => {
+// All auditor routes require the AUDITOR credential.
+// OPERATOR and ADMIN cannot access these endpoints — the legal firewall
+// prevents operators from self-approving their own evidence submissions.
+const requireAuditor = requireRole("AUDITOR");
+
+router.get("/auditor/evidence/:vesselId", requireAuditor, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.vesselId) ? req.params.vesselId[0] : req.params.vesselId;
   const vesselId = parseInt(raw, 10);
   if (isNaN(vesselId)) { res.status(400).json({ error: "Invalid vesselId" }); return; }
@@ -78,16 +83,27 @@ router.get("/auditor/evidence/:vesselId", requireApiKey, async (req, res): Promi
   res.json(GetAuditorEvidenceResponse.parse(pkg));
 });
 
-router.get("/auditor/decisions", requireApiKey, async (req, res): Promise<void> => {
+router.get("/auditor/decisions", requireAuditor, async (req, res): Promise<void> => {
   const decisions = await db.select().from(auditorDecisionsTable).orderBy(desc(auditorDecisionsTable.createdAt));
   const serialized = decisions.map((d) => ({ ...d, createdAt: d.createdAt.toISOString() }));
   res.json(GetAuditorDecisionsResponse.parse(serialized));
 });
 
-router.post("/auditor/decisions", requireApiKey, writeLimiter, async (req, res): Promise<void> => {
+router.post("/auditor/decisions", requireAuditor, writeLimiter, async (req, res): Promise<void> => {
   const parsed = SubmitAuditorDecisionBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const [decision] = await db.insert(auditorDecisionsTable).values(parsed.data).returning();
+
+  // The verifierId is always derived from the authenticated session.
+  // Any verifierId supplied in the request body is explicitly overridden here
+  // to prevent audit-trail forgery and to enforce the legal firewall principle
+  // that verifier identity must be established by the server, not the caller.
+  const verifierId = req.auth!.subject;
+
+  const [decision] = await db.insert(auditorDecisionsTable).values({
+    ...parsed.data,
+    verifierId,
+  }).returning();
+
   res.status(201).json({ ...decision, createdAt: decision.createdAt.toISOString() });
 });
 
