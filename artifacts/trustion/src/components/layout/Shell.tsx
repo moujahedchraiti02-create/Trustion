@@ -6,7 +6,8 @@ import {
   Activity, 
   FileCheck, 
   BellRing, 
-  ShieldCheck
+  ShieldCheck,
+  Key
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ const NAV_ITEMS = [
   { href: "/regulatory-profiles", label: "Regulatory Rules", icon: FileCheck },
   { href: "/alerts", label: "Materiality Alerts", icon: BellRing },
   { href: "/auditor", label: "Auditor Gateway", icon: ShieldCheck },
+  { href: "/auditor/signing-keys", label: "Signing Keys", icon: Key },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {

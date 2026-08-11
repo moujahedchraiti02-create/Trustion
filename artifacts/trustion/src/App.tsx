@@ -15,6 +15,7 @@ import EmissionsList from '@/pages/EmissionsList';
 import ProfilesList from '@/pages/ProfilesList';
 import AlertsList from '@/pages/AlertsList';
 import AuditorGateway from '@/pages/AuditorGateway';
+import SigningKeyHistory from '@/pages/SigningKeyHistory';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,6 +40,7 @@ function Router() {
         <Route path="/regulatory-profiles" component={ProfilesList} />
         <Route path="/alerts" component={AlertsList} />
         <Route path="/auditor" component={AuditorGateway} />
+        <Route path="/auditor/signing-keys" component={SigningKeyHistory} />
         <Route component={NotFound} />
       </Switch>
     </Shell>

@@ -4,13 +4,14 @@ import {
   useSubmitAuditorDecision,
   AuditorDecisionInputDecision
 } from "@workspace/api-client-react";
-import { ShieldCheck, Anchor, Database, Activity, Check, X, HelpCircle, Lock } from "lucide-react";
+import { ShieldCheck, Anchor, Database, Activity, Check, X, HelpCircle, Lock, Key } from "lucide-react";
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { IntegrityBadge } from "@/components/Badges";
 import { useQueryClient } from "@tanstack/react-query";
 import { Textarea } from "@/components/ui/textarea";
+import { Link } from "wouter";
 
 export default function AuditorGateway() {
   const [vesselId, setVesselId] = useState<number | undefined>();
@@ -61,6 +62,13 @@ export default function AuditorGateway() {
               Auditor Gateway
             </h1>
             <p className="text-sm text-muted-foreground mt-1">Independent verification of evidence packages.</p>
+            <Link
+              href="/auditor/signing-keys"
+              className="inline-flex items-center gap-1.5 mt-2 text-xs font-mono text-primary hover:underline"
+            >
+              <Key className="w-3 h-3" />
+              View signing key history &amp; chain-of-custody →
+            </Link>
           </div>
           
           <div className="w-full md:w-72">
