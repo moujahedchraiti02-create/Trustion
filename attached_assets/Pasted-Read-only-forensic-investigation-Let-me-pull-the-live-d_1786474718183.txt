@@ -1,0 +1,75 @@
+Read-only forensic investigation. Let me pull the live data and the hash implementation simultaneously.
+Now I need the hash formula details, chain-status implementation, and to recompute the expected values for entry 1:
+All the evidence I need is now in hand. Let me confirm the seed data origin and check inter-entry consistency for entries 20–23:
+All evidence gathered. No further reads needed — I have complete forensic data.
+
+FORENSIC REPORT — CHAIN STATUS INVESTIGATION
+
+CHAIN STATUS: BROKEN totalEntries: 23 · brokenAtEntry: 1 · lastHash (entry 23): 6fc33984… (64 chars)
+
+FIRST BROKEN ENTRY:
+
+Field	Stored value
+id	1
+vessel_id	1
+event_type	FUEL_CONSUMPTION
+timestamp_gnss	2026-07-02 00:03:07 UTC
+raw_hash (stored)	85f1b5eaf74c5086183549829ead1470 (32 hex chars)
+prev_hash (stored)	NULL (genesis)
+chain_hash (stored)	d6469cd0c45f1481e6a0ba66d0ab8776 (32 hex chars)
+raw_hash (recomputed, SHA-256)	e1d82cb9e2506e64fce99296e2f1ab836eedf4941d969a88941bae4fc8b2c64c (64 hex chars)
+chain_hash (recomputed, SHA-256)	127c287652e3598e265388d7ef4a8c54ef58b3675db2f16fa954eb7e492f89f5 (64 hex chars)
+The recomputed values do not match the stored values. They cannot match: the stored hashes are 32 hex characters (128 bits = MD5 output length); the current implementation produces 64 hex characters (256 bits = SHA-256 output). These are outputs of fundamentally different hash functions.
+
+ROOT CAUSE: Legacy/seed data hashed with MD5; current implementation uses SHA-256.
+
+All entries 1–19 carry 32-char raw_hash and chain_hash values (MD5-era). All entries 20–23 carry 64-char values (SHA-256-era). The current hash chain verifier (computeRawHash → SHA-256, computeChainHash → SHA-256) recomputes 64-char values that can never equal the stored 32-char values. The break occurs at entry 1 because that is the first entry the verifier checks; it stops there.
+
+This is not a code defect in the current verifier. The verifier is working correctly. The stored data is incompatible with the current algorithm.
+
+EXACT FORMULA (current implementation):
+
+rawHash   = sha256(JSON.stringify({ vesselId, eventType, timestampGnss.toISOString(),
+                                    fuelType, fuelMassKg, engineLoadPct }))
+chainHash = sha256(`${rawHash}:${prevHash ?? "GENESIS"}`)
+Genesis entry is identified by prevHash === null. The sentinel string "GENESIS" is substituted. Entry 1 is stored with prev_hash = NULL in the DB (correctly marking it as genesis).
+
+GENESIS VALID: UNKNOWN for the MD5 era. Entry 1's prev_hash is correctly NULL. Whether the MD5-era seed used the same "GENESIS" sentinel and the same 6-field canonical object cannot be verified — the original seed script is not present in the repository. What is certain is that even if we matched the field set exactly, the MD5 result (32 chars) stored in chain_hash can never be reproduced by the SHA-256 verifier (64 chars).
+
+TASK #11 REGRESSION: NO
+
+Proven from code: the chain-status route (lines 504–518 of routes/ledger.ts) calls computeRawHash with exactly {vesselId, eventType, timestampGnss, fuelType, fuelMassKg, engineLoadPct}. Task #11 added five new columns (sourceDeviceId, sourceKeyId, sourceSignature, sourceSigningMode, deviceSequenceNumber) and the EDGE_INGEST path to ledger.ts. None of the new columns appear in the rawHash field set. computeRawHash and computeChainHash were not modified. The chain-status route was not modified. The BROKEN state existed before Task #11 and is identical after it.
+
+LATER CHAIN CONSISTENCY:
+
+Entries 20–23 are internally self-consistent as a SHA-256 sub-chain:
+
+Pair	chain_hash[n] matches prev_hash[n+1]?
+19→20	✓ (entry 20's prevHash = entry 19's 32-char chain_hash — correctly preserved as a link)
+20→21	✓
+21→22	✓
+22→23	✓
+The verifier never reaches these entries because it breaks out at entry 1. If the first 19 entries were removed or the verifier started from entry 20, entries 20–23 would verify correctly under the SHA-256 algorithm.
+
+PRODUCTION TEST/DEMO DATA PRESENT: YES
+
+Evidence:
+
+Entries 1–19: all share created_at = 2026-08-01 to the millisecond — a single bulk insert, not organic submissions.
+Three entries carry signer_mode = 'UNSIGNED' (ids 3, 11, 17) and six carry signer_mode = 'TPM2' (ids 7–10, 12, 13). The production system has never supported UNSIGNED or TPM2 signing modes — these are demo/placeholder values.
+All event dates are clustered in July 2026 with artificial spacing, consistent with generated demo data.
+Entries 20–23 have created_at = 2026-08-09 — consistent with test submissions made during development of the SHA-256 implementation (Tasks #8–#10 era).
+DATA MODIFIED: NO
+
+All investigation was read-only: DB SELECT queries and curl to the running API only.
+
+RECOMMENDED ACTION (do not execute):
+
+The entries 1–19 are pre-SHA-256 seed/demo records, not genuine production evidence. The entries 20–23 are real SHA-256 submissions created during development.
+
+Safest treatment in order of invasiveness:
+
+Annotate (safest — no ledger modification): Create a separate audit record explicitly classifying entries 1–19 as "pre-production seed data, MD5-era, not genuine compliance evidence." The ledger is left entirely untouched. The BROKEN status is acknowledged and documented.
+Flag at the vessel level: If vessel-scoped chain verification is added, vessels 1–3 (all seed data) could be administratively marked as demonstration vessels, and chain-status reporting could be scoped to exclude them from compliance checks.
+Archive with auditor approval (destructive — requires legal/compliance review): With documented written approval from the designated auditor, entries 1–19 could be moved to a read-only historical archive table preserving every original column value, then removed from ledger_entries. This would make the BROKEN status disappear. This path requires an explicit audit trail of the archival decision and must never be done silently.
+Never re-hash, overwrite, or silently repair existing ledger entries. An evidence ledger's integrity depends on immutability.
