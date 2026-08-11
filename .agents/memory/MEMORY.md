@@ -1,1 +1,2 @@
 - [Ledger signing identity](ledger-signing-identity.md) — Ed25519 signatures support a configured persistent secret or a generated process-local key for development.
+- [Workspace manifest integrity](workspace-manifest-integrity.md) — Publishing installs the repo first, so duplicated JSON blocks can fail publishing before app builds run.
