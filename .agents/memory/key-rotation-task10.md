@@ -1,41 +1,61 @@
 ---
-name: Signing Key Rotation (Task #10)
-description: Architecture and limitations of the key registry + rotation system implemented for S³V TRUSTION.
+name: Signing Key Rotation — Task #10 security hardening
+description: Architecture decisions and implementation constraints for the key rotation & historical verification system.
 ---
 
-## Key ID vs Fingerprint
-- `key_id` = SHA-256(publicKey bytes) as 64 hex chars → stable, unique, stored on ledger entries.
-- `fingerprint` = first 16 hex chars of `key_id` → used only in startup/rotation log lines.
-- They are distinct by design. Do NOT confuse them.
+## Core constraints
 
-## Registry architecture
-- In-memory `Map<keyId, KeyRegistryEntry>` in `lib/keyRegistry.ts` (sync reads).
-- Async fire-and-forget DB persistence to `signing_key_registry` table.
-- `initRegistry()` called after `app.listen()` to repopulate map from DB on restart.
-- At-most-one-ACTIVE invariant enforced in `registerKey()`.
+- `rotateSigningKey(newKeyHex)` is **permanently removed**. The only rotation path is: update `ED25519_SECRET_KEY_HEX` secret → restart → atomic DB activation via `initRegistryAndActivate()`.
+- No API endpoint ever accepts private key material. `POST /api/key-registry/rotate` was removed in the hardening pass.
+- `_activeKeyId` starts as `null` at module load. `signPayload()` throws until `initRegistryAndActivate()` completes and the caller calls `_setActiveKeyId(keyId)`. This is the "startup before listen" invariant at code level.
 
-## Status model
-- ACTIVE → signs new evidence.
-- RETIRED → no new signing; historical verification still works.
-- REVOKED → no new signing; `_activeKeyId` set to null; DB record + reason preserved permanently. Cannot be re-activated.
+## Key API shape
 
-## Rotation model
-- `rotateSigningKey(newKeyHex)` in `crypto.ts`: retires current, registers new, updates `_signingKeyPair`/`_activeKeyId`.
-- Only in-memory. For persistence across restarts, also update `ED25519_SECRET_KEY_HEX` env var.
-- Key A retired → history still verifiable using stored publicKey or `verifyPayloadByKeyId(keyId_A)`.
+- `initRegistryAndActivate(pubKeyHex, fingerprint, signingMode, actor?)` → `Promise<string>` (keyId)
+  - Must be awaited before `app.listen()`.
+  - Throws (fails closed) on any DB transaction failure, REVOKED key, or other anomaly.
+  - Idempotent: safe to call on restart when the same key is already ACTIVE.
+  - After resolve, caller calls `_setActiveKeyId(keyId)` to allow signing.
+- `signPayload(payload)` → `{ signature, publicKey, keyId }` — 3 fields, no private material.
+- `checkSignatureContext(payload, sig, keyId, verifyFn, signatureTimestamp?)` → `{ valid, keyStatus, revokedAt, signedBeforeRevocation }` for forensic auditor queries.
+- `verifyPayloadByKeyId(payload, sig, keyId)` → `boolean` — raw crypto check, status check is caller's responsibility.
 
-## `signPayload()` now returns `keyId`
-- Return value: `{ signature, publicKey, keyId }`.
-- Callers in `ledger.ts` destructure all three and store `keyId` in the DB.
-- Any test asserting exactly 2 keys must be updated to expect 3.
+## DB schema additions
 
-## Route security
-- `GET /api/key-registry` → public (no auth).
-- `POST /api/key-registry/rotate|retire|revoke` → ADMIN role required.
+- `signing_key_registry`: added `revoked_at` column (distinct from `retired_at`). Both nullable; revoked key gets both set; retired-only key gets only `retired_at`.
+- `signing_key_events`: new append-only table — KEY_ACTIVATED / KEY_RETIRED / KEY_REVOKED events with actor and reason.
+- Partial unique index: `CREATE UNIQUE INDEX IF NOT EXISTS one_active_signing_key_idx ON signing_key_registry ((1)) WHERE status = 'ACTIVE'` — enforced at the DB level.
 
-## Test isolation
-- `_reinitForTesting(keyHex)` in `crypto.ts`: clears registry, re-inits with given key.
-- DB mocks need `onConflictDoNothing: () => chain` on the chain object.
-- DB mock exports need `signingKeyRegistryTable: { keyId: {} }`.
+## revokedAt ≠ retiredAt
 
-**Why:** Historical verifiability is a hard regulatory requirement (FuelEU Maritime / IMO DCS). Revoked keys cannot disappear from the DB.
+`revokedAt` is the forensic timestamp for `signedBeforeRevocation` comparisons. A key that is merely retired (rotation) has `revokedAt = null`. Only explicitly revoked keys (compromise, audit finding) get `revokedAt` set.
+
+## Test helper exports (from `lib/crypto.ts`)
+
+For tests that need to set up state without going through the DB:
+- `_reinitForTesting(keyHex)` — clean slate, sets key pair + registry entry + activeKeyId (no DB).
+- `_simulateRotationForTesting(newKeyHex)` — retires old ACTIVE in memory, activates new key (no DB), preserves history.
+- `_clearRegistryForTesting()` — wipes in-memory map.
+- `_setRegistryEntryForTesting(entry)` — set arbitrary entry in map.
+- `_setActiveKeyId(keyId | null)` — directly set activeKeyId (null means signing blocked).
+- `_loadRegistryFromDb()` — re-hydrate in-memory map from DB (use with DB mock for restart simulation).
+
+**Why:** tests use these rather than calling `initRegistryAndActivate()` (which requires full DB mock setup) to avoid test complexity for in-memory behavioral tests.
+
+## DB mock pattern for key-rotation tests
+
+The `@workspace/db` mock must support:
+- `db.execute()` → `{ rows: [] }` (CREATE INDEX calls)
+- `db.transaction(cb)` → calls `cb(mockTx)` where `mockTx` has `execute()`, `select()`, `update()`, `insert()`
+- `tx.execute()` → `{ rows: mockActiveRows }` (SELECT FOR UPDATE)
+- `tx.select().from().where().limit(n)` → `mockExistingKeyRows.slice(0, n)` (key lookup)
+- `db.select().from()` → `mockRegistryRows` (_loadRegistryFromDb after commit)
+- Configurable `transactionThrows: boolean` for failure-mode tests
+
+## Test counts
+
+Final: **188 tests passing** across 5 test files (was 181 before hardening pass).
+
+## Documented limitation
+
+Zero-downtime rotation is not supported. Rotation requires a process restart. Documented in crypto.ts header comment.

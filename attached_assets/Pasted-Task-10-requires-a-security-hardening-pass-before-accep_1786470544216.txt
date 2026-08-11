@@ -1,0 +1,97 @@
+Task #10 requires a security hardening pass before acceptance. Do not proceed to Task #11 and do not republish.
+
+The historical-verification design is directionally correct, but the current rotation workflow has several forensic and secret-management problems.
+
+1. Do not transmit private Ed25519 keys through an application API.
+
+Remove or redesign any endpoint that accepts newKeyHex or other private key material in the request body.
+
+Private signing keys must be provisioned through the deployment secret mechanism / secure key provider abstraction, not transported through normal REST application traffic.
+
+The API may request/authorize a rotation workflow, but it must never receive or return private key material.
+
+2. Eliminate fire-and-forget key-registry persistence.
+
+A signing identity must not become ACTIVE or sign evidence until its public metadata and lifecycle state have been durably committed.
+
+Persistence failures must fail closed.
+
+3. Hydrate and validate the key registry before the API begins accepting requests.
+
+Do not start listening and then asynchronously initialize the registry.
+
+Production startup must fail if the active signing identity and durable registry state are inconsistent.
+
+4. Make lifecycle history append-only.
+
+Preserve the immutable signing-key identity record, but represent lifecycle transitions using an append-only event history such as:
+
+* KEY_ACTIVATED
+* KEY_RETIRED
+* KEY_REVOKED
+
+Every lifecycle event must record:
+
+* key_id
+* event type
+* effective timestamp
+* authenticated actor
+* reason where applicable
+* creation timestamp
+
+Do not rely solely on overwriting a status field to represent forensic history.
+
+5. Add explicit revocation time.
+
+Historical verification must distinguish:
+
+* a signature created legitimately before later revocation;
+* a signature allegedly created after the key’s effective revocation.
+
+Preserve both retirement and revocation timestamps and semantics.
+
+6. Enforce the one-active-key invariant durably.
+
+Do not rely only on in-memory logic. Use appropriate database constraints/transactional locking so concurrent processes cannot create multiple ACTIVE signing identities for the same signing purpose.
+
+7. Define one authoritative activation model.
+
+The environment secret, in-memory signer, and database registry must not disagree after a rotation or restart.
+
+If this prototype cannot perform zero-downtime secure rotation with the current secret provider, implement a safe staged workflow instead:
+
+provision new secret → restart/startup validation → atomically activate registry identity → begin signing
+
+and document that limitation clearly.
+
+8. Historical verification must remain offline-capable by design.
+
+Do not require a live /api/key-registry request as the only way to determine historical key status. Ensure registry/lifecycle data can later be included in an independent TRUSTION evidence package.
+
+9. Preserve the current guarantees:
+
+* evidence permanently retains original key_id;
+* old signatures remain verifiable;
+* retired/revoked private keys cannot sign new evidence;
+* private key material never enters DB, logs, frontend, API responses, repository, or evidence packages;
+* no TPM/HSM claim.
+
+10. Add regression tests for:
+
+* registry persistence failure prevents activation/signing;
+* API never accepts private key material;
+* startup does not listen before registry hydration succeeds;
+* registry/secret mismatch fails closed;
+* concurrent rotation cannot create two ACTIVE identities;
+* lifecycle event history is preserved across ACTIVE → RETIRED → REVOKED;
+* revocation timestamp is retained;
+* evidence signed before revocation remains historically verifiable with the correct status context;
+* evidence attributed after effective revocation is rejected/flagged;
+* restart produces exactly the same active identity and registry state;
+* no private key appears anywhere outside the secure key provider.
+
+Run the complete test suite, workspace typecheck, production build, and security checks.
+
+Report the runner-derived test count and the exact final rotation state machine.
+
+Do not republish.

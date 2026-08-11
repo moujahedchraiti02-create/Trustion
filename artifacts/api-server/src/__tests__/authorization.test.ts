@@ -36,12 +36,19 @@ const dbMock = vi.hoisted(() => {
     limit:               () => chain,
     onConflictDoNothing: () => chain,
   };
+  const mockTx = {
+    select:  () => chain,
+    update:  () => chain,
+    insert:  () => chain,
+    execute: async () => ({ rows: [] }),
+  };
   return {
     db: {
-      select:  () => chain,
-      update:  () => chain,
-      insert:  () => chain,
-      execute: async () => ({ rows: [{}] }),
+      select:      () => chain,
+      update:      () => chain,
+      insert:      () => chain,
+      execute:     async () => ({ rows: [] }),
+      transaction: async (cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx),
     },
   };
 });
@@ -55,6 +62,7 @@ vi.mock("@workspace/db", () => ({
   regulatoryProfilesTable:  {},
   auditorDecisionsTable:    {},
   signingKeyRegistryTable:  { keyId: {} },
+  signingKeyEventsTable:    { keyId: {}, eventType: {} },
 }));
 
 // Import app AFTER mock is in place

@@ -13,8 +13,37 @@
  *   8. Wrong public key fails verification.
  *   9. Private key is absent from logs, API responses, and the signPayload return.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeAll } from "vitest";
 import nacl from "tweetnacl";
+
+// ─── DB mock — must be hoisted before any imports that load @workspace/db ─────
+
+vi.mock("@workspace/db", () => {
+  const chain: Record<string, unknown> & { then: unknown } = {
+    then:    (r: (v: unknown[]) => unknown) => Promise.resolve([]).then(r),
+    catch:   (r: (e: unknown) => unknown)   => Promise.resolve([]).catch(r),
+    finally: (cb: () => void)               => Promise.resolve([]).finally(cb),
+    from: () => chain, where: () => chain, orderBy: () => chain,
+    set: () => chain, values: () => chain, returning: () => chain,
+    limit: () => chain, onConflictDoNothing: () => chain,
+  };
+  const mockTx = {
+    select: () => chain, update: () => chain, insert: () => chain,
+    execute: async () => ({ rows: [] }),
+  };
+  return {
+    db: {
+      select: () => chain, update: () => chain, insert: () => chain,
+      execute: async () => ({ rows: [] }),
+      transaction: async (cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx),
+    },
+    signingKeyRegistryTable: { keyId: {} },
+    signingKeyEventsTable:   { keyId: {}, eventType: {} },
+    ledgerEntriesTable:      { keyId: {}, publicKey: {} },
+    alertsTable: {}, vesselsTable: {}, emissionsRecordsTable: {},
+    regulatoryProfilesTable: {}, auditorDecisionsTable: {},
+  };
+});
 
 import {
   initSigningIdentity,
@@ -24,7 +53,17 @@ import {
   signingPublicKeyHex,
   signingKeyFingerprint,
   signingMode,
+  _reinitForTesting,
 } from "../lib/crypto.js";
+
+// ─── Ensure _activeKeyId is set before any signPayload() calls ────────────────
+
+/** Deterministic seed for the crypto test session. */
+const SEED_FOR_CRYPTO_TESTS = "aa".repeat(32);
+
+beforeAll(() => {
+  _reinitForTesting(SEED_FOR_CRYPTO_TESTS);
+});
 
 // ─── Known test vectors ───────────────────────────────────────────────────────
 

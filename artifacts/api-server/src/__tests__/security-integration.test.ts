@@ -37,11 +37,19 @@ const { mockDb, resetLimitCapture, getCapturedLimit } = vi.hoisted(() => {
     onConflictDoNothing: () => chain,
   };
 
+  const mockTx = {
+    select: () => chain,
+    update: () => chain,
+    insert: () => chain,
+    execute: async () => ({ rows: [] }),
+  };
+
   const mockDb = {
     select: () => chain,
     update: () => chain,
     insert: () => chain,
     execute: async () => ({ rows: [] }),
+    transaction: async (cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx),
   };
 
   return {
@@ -60,6 +68,7 @@ vi.mock("@workspace/db", () => ({
   regulatoryProfilesTable: {},
   auditorDecisionsTable: {},
   signingKeyRegistryTable: { keyId: {} },
+  signingKeyEventsTable:   { keyId: {}, eventType: {} },
 }));
 
 // Import app AFTER vi.mock so the mock is in place
