@@ -11,6 +11,7 @@ A sovereign maritime carbon evidence ledger — an edge-to-cloud forensic instru
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
+- Required env: `ED25519_SECRET_KEY_HEX` — persistent Ed25519 signing key (32-byte seed or 64-byte secret key, hex-encoded). Must be set as a stable secret; the server will refuse to start without it. Generate a seed with: `node -e "const nacl=require('tweetnacl');console.log(Buffer.from(nacl.sign.keyPair().secretKey.slice(0,32)).toString('hex'))"`
 
 ## Stack
 

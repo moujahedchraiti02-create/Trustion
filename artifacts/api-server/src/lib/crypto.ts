@@ -34,24 +34,25 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 const configuredSecretKey = process.env.ED25519_SECRET_KEY_HEX;
-const signingKeyPair = configuredSecretKey
-  ? (() => {
-      const secretKey = hexToBytes(configuredSecretKey);
-      if (secretKey.length !== nacl.sign.secretKeyLength && secretKey.length !== nacl.sign.seedLength) {
-        throw new Error(
-          `ED25519_SECRET_KEY_HEX must be ${nacl.sign.seedLength} bytes (seed) or ${nacl.sign.secretKeyLength} bytes (secret key).`,
-        );
-      }
-      return secretKey.length === nacl.sign.seedLength
-        ? nacl.sign.keyPair.fromSeed(secretKey)
-        : nacl.sign.keyPair.fromSecretKey(secretKey);
-    })()
-  : (() => {
-      logger.warn(
-        "ED25519_SECRET_KEY_HEX is not configured; using a temporary process-local Ed25519 key. This is NOT suitable for production or regulatory audit.",
-      );
-      return nacl.sign.keyPair();
-    })();
+if (!configuredSecretKey) {
+  throw new Error(
+    "ED25519_SECRET_KEY_HEX is not set. A persistent Ed25519 signing key is required to ensure ledger signatures remain verifiable across restarts and deployments. " +
+    "Generate a seed with: node -e \"const nacl=require('tweetnacl');console.log(Buffer.from(nacl.sign.keyPair().secretKey.slice(0,32)).toString('hex'))\" " +
+    "and set it as the ED25519_SECRET_KEY_HEX environment secret.",
+  );
+}
+
+const signingKeyPair = (() => {
+  const secretKey = hexToBytes(configuredSecretKey);
+  if (secretKey.length !== nacl.sign.secretKeyLength && secretKey.length !== nacl.sign.seedLength) {
+    throw new Error(
+      `ED25519_SECRET_KEY_HEX must be ${nacl.sign.seedLength} bytes (seed) or ${nacl.sign.secretKeyLength} bytes (secret key).`,
+    );
+  }
+  return secretKey.length === nacl.sign.seedLength
+    ? nacl.sign.keyPair.fromSeed(secretKey)
+    : nacl.sign.keyPair.fromSecretKey(secretKey);
+})();
 
 function payloadBytes(payload: Payload): Uint8Array {
   return naclUtil.decodeUTF8(stableStringify(payload));
