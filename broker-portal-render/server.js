@@ -27,6 +27,8 @@ function hash(s){return crypto.createHash('sha256').update(String(s||'')).digest
 function invite(req){const broker=String(req.query.broker||req.body.broker||'').toLowerCase();const key=String(req.query.key||req.body.key||'');return INVITE_HASHES[broker]&&hash(key)===INVITE_HASHES[broker]?broker:null}
 function num(v){if(v===null||v===undefined||v==='')return null;const n=Number(v);return Number.isFinite(n)?n:null}
 function validDir(v){return ['UP','FLAT','DOWN','UNCERTAIN'].includes(v)}
+function admin(req){const supplied=String(req.get('x-admin-key')||req.query.key||'');return Boolean(process.env.ADMIN_KEY&&supplied&&crypto.timingSafeEqual(Buffer.from(hash(supplied)),Buffer.from(hash(process.env.ADMIN_KEY))))}
+function round2(n){return Math.round(Number(n)*100)/100}
 
 async function init(){
   await pool.query(`CREATE TABLE IF NOT EXISTS broker_reviews(
@@ -56,9 +58,28 @@ async function init(){
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(review_id,broker)
   )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS actual_outcomes(
+    id BIGSERIAL PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    baseline_version TEXT NOT NULL,
+    baseline_commit TEXT NOT NULL,
+    actual_mid NUMERIC NOT NULL,
+    actual_low NUMERIC,
+    actual_high NUMERIC,
+    observed_at TIMESTAMPTZ NOT NULL,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    source_type TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    source_ref TEXT,
+    methodology TEXT,
+    notes TEXT,
+    supersedes_id BIGINT REFERENCES actual_outcomes(id),
+    evidence_hash TEXT NOT NULL
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS actual_outcomes_case_recorded_idx ON actual_outcomes(case_id,recorded_at DESC)`);
 }
 
-app.get('/health',async(req,res)=>{try{await pool.query('SELECT 1');res.json({ok:true,service:'dry-bulk-broker-validation',mode:'blind-first',storage:'postgres',baseline:BASELINE_VERSION})}catch(e){res.status(503).json({ok:false,storage:'postgres',error:'database unavailable'})}});
+app.get('/health',async(req,res)=>{try{await pool.query('SELECT 1');res.json({ok:true,service:'dry-bulk-broker-validation',mode:'blind-first',storage:'postgres',baseline:BASELINE_VERSION,outcome_ledger:'append-only'})}catch(e){res.status(503).json({ok:false,storage:'postgres',error:'database unavailable'})}});
 app.get('/api/cases',(req,res)=>{const broker=invite(req);if(!broker)return res.status(403).json({error:'invalid invitation'});const blindCases=CASES.map(({id,route,commodity,cargo,vessel})=>({id,route,commodity,cargo,vessel}));res.json({broker,label:BROKER_LABELS[broker]||broker,cases:blindCases,validation_mode:'BLIND_FIRST',baseline_version:BASELINE_VERSION});});
 app.post('/api/reviews',async(req,res)=>{
   const broker=invite(req);if(!broker)return res.status(403).json({error:'invalid invitation'});
@@ -68,7 +89,7 @@ app.post('/api/reviews',async(req,res)=>{
   if(fairLow!==null&&fairHigh!==null&&fairLow>fairHigh)return res.status(400).json({error:'fair low cannot exceed fair high'});
   if(!validDir(x.direction))return res.status(400).json({error:'invalid direction'});
   if(confidence===null||confidence<1||confidence>5)return res.status(400).json({error:'confidence must be 1-5'});
-  const diff=Number((c.mid-fairMid).toFixed(2));
+  const diff=round2(c.mid-fairMid);
   try{
     await pool.query(`INSERT INTO broker_reviews(review_id,broker,broker_name,broker_company,fair_mid,fair_low,fair_high,direction,confidence,reason_code,comment,validation_mode,baseline_version,baseline_commit,model_mid,model_low,model_high,model_direction,model_confidence,market_state,model_minus_broker_mid)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'BLIND_FIRST',$12,$13,$14,$15,$16,$17,$18,$19,$20)
@@ -76,6 +97,56 @@ app.post('/api/reviews',async(req,res)=>{
     const saved=await pool.query('SELECT first_submitted_at FROM broker_reviews WHERE review_id=$1 AND broker=$2',[x.review_id,broker]);
     res.json({ok:true,locked:true,submitted_at:saved.rows[0]?.first_submitted_at||null,reveal:{model_mid:c.mid,model_low:c.low,model_high:c.high,model_direction:c.direction,model_confidence:c.confidence,regime:c.regime,difference_mid:diff}});
   }catch(e){console.error('BROKER_REVIEW_DB_ERROR',e);res.status(500).json({error:'review could not be persisted'})}
+});
+
+app.post('/api/admin/outcomes',async(req,res)=>{
+  if(!admin(req))return res.status(403).json({error:'forbidden'});
+  const x=req.body||{};const c=CASES.find(z=>z.id===x.case_id);if(!c)return res.status(400).json({error:'unknown case'});
+  const actualMid=num(x.actual_mid),actualLow=num(x.actual_low),actualHigh=num(x.actual_high),supersedes=num(x.supersedes_id);
+  if(actualMid===null)return res.status(400).json({error:'actual_mid is required'});
+  if(actualLow!==null&&actualHigh!==null&&actualLow>actualHigh)return res.status(400).json({error:'actual_low cannot exceed actual_high'});
+  if(!x.observed_at||Number.isNaN(Date.parse(x.observed_at)))return res.status(400).json({error:'valid observed_at is required'});
+  if(!String(x.source_type||'').trim()||!String(x.source_name||'').trim())return res.status(400).json({error:'source_type and source_name are required'});
+  if(supersedes!==null){const prev=await pool.query('SELECT id,case_id FROM actual_outcomes WHERE id=$1',[supersedes]);if(prev.rowCount!==1||prev.rows[0].case_id!==x.case_id)return res.status(400).json({error:'supersedes_id must reference an outcome for the same case'});}
+  const canonical={case_id:x.case_id,baseline_version:BASELINE_VERSION,baseline_commit:BASELINE_COMMIT,actual_mid:actualMid,actual_low:actualLow,actual_high:actualHigh,observed_at:new Date(x.observed_at).toISOString(),source_type:String(x.source_type).trim(),source_name:String(x.source_name).trim(),source_ref:String(x.source_ref||''),methodology:String(x.methodology||''),notes:String(x.notes||''),supersedes_id:supersedes};
+  const evidenceHash=hash(JSON.stringify(canonical));
+  const q=await pool.query(`INSERT INTO actual_outcomes(case_id,baseline_version,baseline_commit,actual_mid,actual_low,actual_high,observed_at,source_type,source_name,source_ref,methodology,notes,supersedes_id,evidence_hash)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,[canonical.case_id,canonical.baseline_version,canonical.baseline_commit,canonical.actual_mid,canonical.actual_low,canonical.actual_high,canonical.observed_at,canonical.source_type,canonical.source_name,canonical.source_ref,canonical.methodology,canonical.notes,canonical.supersedes_id,evidenceHash]);
+  res.status(201).json({ok:true,outcome:q.rows[0]});
+});
+
+app.get('/api/admin/outcomes',async(req,res)=>{
+  if(!admin(req))return res.status(403).json({error:'forbidden'});
+  const q=await pool.query(`SELECT * FROM actual_outcomes ORDER BY case_id,recorded_at DESC,id DESC`);
+  res.json({count:q.rowCount,outcomes:q.rows});
+});
+
+app.get('/api/admin/validation-metrics',async(req,res)=>{
+  if(!admin(req))return res.status(403).json({error:'forbidden'});
+  const q=await pool.query(`WITH latest_actual AS (
+    SELECT DISTINCT ON (case_id) * FROM actual_outcomes ORDER BY case_id,recorded_at DESC,id DESC
+  ), joined AS (
+    SELECT b.review_id,b.broker,b.fair_mid::float8 AS broker_mid,b.model_mid::float8 AS model_mid,a.actual_mid::float8 AS actual_mid,
+      abs(b.model_mid::float8-a.actual_mid::float8) AS model_abs_error,
+      abs(b.fair_mid::float8-a.actual_mid::float8) AS broker_abs_error,
+      (b.model_mid::float8-a.actual_mid::float8) AS model_error,
+      (b.fair_mid::float8-a.actual_mid::float8) AS broker_error
+    FROM broker_reviews b JOIN latest_actual a ON a.case_id=b.review_id
+  ) SELECT
+    count(*)::int AS paired_observations,
+    round(avg(model_abs_error)::numeric,4) AS model_mae,
+    round(avg(broker_abs_error)::numeric,4) AS broker_mae,
+    round(avg(model_error)::numeric,4) AS model_bias,
+    round(avg(broker_error)::numeric,4) AS broker_bias,
+    round(sqrt(avg(model_error*model_error))::numeric,4) AS model_rmse,
+    round(sqrt(avg(broker_error*broker_error))::numeric,4) AS broker_rmse
+    FROM joined`);
+  const coverage=await pool.query(`WITH latest_actual AS (SELECT DISTINCT ON (case_id) * FROM actual_outcomes ORDER BY case_id,recorded_at DESC,id DESC)
+    SELECT count(*)::int AS cases_with_actual,
+      count(*) FILTER (WHERE a.actual_mid BETWEEN b.model_low AND b.model_high)::int AS model_interval_hits,
+      CASE WHEN count(*)=0 THEN NULL ELSE round((100.0*count(*) FILTER (WHERE a.actual_mid BETWEEN b.model_low AND b.model_high)/count(*))::numeric,2) END AS model_interval_coverage_pct
+    FROM (SELECT DISTINCT ON (review_id) * FROM broker_reviews ORDER BY review_id,first_submitted_at) b JOIN latest_actual a ON a.case_id=b.review_id`);
+  res.json({baseline_version:BASELINE_VERSION,...q.rows[0],...coverage.rows[0]});
 });
 
 const css=`body{margin:0;background:#f4f7fa;color:#102638;font-family:Inter,Arial,sans-serif}header{background:linear-gradient(120deg,#062b43,#176a87);color:white;padding:24px}.wrap{max-width:980px;margin:auto;padding:20px}.card{background:white;border:1px solid #dce5ed;border-radius:14px;padding:18px;margin-bottom:14px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}input,select,textarea{width:100%;box-sizing:border-box;padding:10px;border:1px solid #ccd8e2;border-radius:8px}button{background:#176a87;color:white;border:0;border-radius:8px;padding:11px 16px;font-weight:700;cursor:pointer}.muted{color:#68798c}.hero{font-size:32px;font-weight:800;line-height:1.08}.cta{font-size:18px;line-height:1.5}.invite{background:#eaf7f2;border:1px solid #bfe2d7;padding:10px;border-radius:9px;margin-bottom:12px}.blind{background:#fff7e8;border:1px solid #ead39c;padding:10px;border-radius:9px;margin:10px 0}.reveal{background:#eef7ff;border:1px solid #bfd8ea;padding:10px;border-radius:9px;margin-top:10px}@media(max-width:700px){.grid{grid-template-columns:1fr}.hero{font-size:27px}}`;
@@ -87,4 +158,4 @@ app.get('/',(req,res)=>{
   res.type('html').send(shell(page));
 });
 
-init().then(()=>app.listen(process.env.PORT||10000,'0.0.0.0',()=>console.log('Broker validation portal listening with Postgres persistence'))).catch(e=>{console.error('DB_INIT_FAILED',e);process.exit(1)});
+init().then(()=>app.listen(process.env.PORT||10000,'0.0.0.0',()=>console.log('Broker validation portal listening with Postgres persistence + actual outcome ledger'))).catch(e=>{console.error('DB_INIT_FAILED',e);process.exit(1)});
