@@ -1,0 +1,205 @@
+week,route,size,low,high,mid,source_report
+2,Turkish Black Sea,5-7k,23.0,25.0,24.0,FRMD WK 02-26.pdf
+2,Turkish Black Sea,10-15k,22.0,24.0,23.0,FRMD WK 02-26.pdf
+2,"Marmara, Turkey",5-7k,25.0,27.0,26.0,FRMD WK 02-26.pdf
+2,"Marmara, Turkey",10-15k,23.0,25.0,24.0,FRMD WK 02-26.pdf
+2,East Mediterranean,5-7k,32.0,34.0,33.0,FRMD WK 02-26.pdf
+2,East Mediterranean,10-15k,28.0,30.0,29.0,FRMD WK 02-26.pdf
+3,Turkish Black Sea,5-7k,23.0,25.0,24.0,FRMD WK 03-26.pdf
+3,Turkish Black Sea,10-15k,22.0,24.0,23.0,FRMD WK 03-26.pdf
+3,"Marmara, Turkey",5-7k,25.0,27.0,26.0,FRMD WK 03-26.pdf
+3,"Marmara, Turkey",10-15k,23.0,25.0,24.0,FRMD WK 03-26.pdf
+3,East Mediterranean,5-7k,32.0,34.0,33.0,FRMD WK 03-26.pdf
+3,East Mediterranean,10-15k,28.0,30.0,29.0,FRMD WK 03-26.pdf
+4,Turkish Black Sea,5-7k,23.0,25.0,24.0,FRMD WK 04-26.pdf
+4,Turkish Black Sea,10-15k,22.0,24.0,23.0,FRMD WK 04-26.pdf
+4,"Marmara, Turkey",5-7k,24.0,26.0,25.0,FRMD WK 04-26.pdf
+4,"Marmara, Turkey",10-15k,23.0,25.0,24.0,FRMD WK 04-26.pdf
+4,East Mediterranean,5-7k,32.0,34.0,33.0,FRMD WK 04-26.pdf
+4,East Mediterranean,10-15k,28.0,30.0,29.0,FRMD WK 04-26.pdf
+5,Turkish Black Sea,5-7k,24.0,26.0,25.0,FRMD WK 05-26.pdf
+5,Turkish Black Sea,10-15k,22.0,24.0,23.0,FRMD WK 05-26.pdf
+5,"Marmara, Turkey",5-7k,25.0,27.0,26.0,FRMD WK 05-26.pdf
+5,"Marmara, Turkey",10-15k,23.0,25.0,24.0,FRMD WK 05-26.pdf
+5,East Mediterranean,5-7k,32.0,34.0,33.0,FRMD WK 05-26.pdf
+5,East Mediterranean,10-15k,29.0,31.0,30.0,FRMD WK 05-26.pdf
+6,Turkish Black Sea,5-7k,24.0,26.0,25.0,FRMD WK 06-26.pdf
+6,Turkish Black Sea,10-15k,22.0,24.0,23.0,FRMD WK 06-26.pdf
+6,"Marmara, Turkey",5-7k,25.0,27.0,26.0,FRMD WK 06-26.pdf
+6,"Marmara, Turkey",10-15k,23.0,25.0,24.0,FRMD WK 06-26.pdf
+6,East Mediterranean,5-7k,31.0,33.0,32.0,FRMD WK 06-26.pdf
+6,East Mediterranean,10-15k,29.0,31.0,30.0,FRMD WK 06-26.pdf
+7,Turkish Black Sea,5-7k,24.0,26.0,25.0,FRMD WK 07-26.pdf
+7,Turkish Black Sea,10-15k,22.0,24.0,23.0,FRMD WK 07-26.pdf
+7,"Marmara, Turkey",5-7k,25.0,27.0,26.0,FRMD WK 07-26.pdf
+7,"Marmara, Turkey",10-15k,23.0,25.0,24.0,FRMD WK 07-26.pdf
+7,East Mediterranean,5-7k,31.0,33.0,32.0,FRMD WK 07-26.pdf
+7,East Mediterranean,10-15k,29.0,31.0,30.0,FRMD WK 07-26.pdf
+8,Turkish Black Sea,5-7k,24.0,26.0,25.0,FRMD WK 08-26.pdf
+8,Turkish Black Sea,10-15k,22.0,24.0,23.0,FRMD WK 08-26.pdf
+8,"Marmara, Turkey",5-7k,25.0,27.0,26.0,FRMD WK 08-26.pdf
+8,"Marmara, Turkey",10-15k,23.0,25.0,24.0,FRMD WK 08-26.pdf
+8,East Mediterranean,5-7k,32.0,34.0,33.0,FRMD WK 08-26.pdf
+8,East Mediterranean,10-15k,30.0,32.0,31.0,FRMD WK 08-26.pdf
+9,Turkish Black Sea,5-7k,24.0,26.0,25.0,FRMD WK 09-26.pdf
+9,Turkish Black Sea,10-15k,22.0,24.0,23.0,FRMD WK 09-26.pdf
+9,"Marmara, Turkey",5-7k,25.0,27.0,26.0,FRMD WK 09-26.pdf
+9,"Marmara, Turkey",10-15k,23.0,25.0,24.0,FRMD WK 09-26.pdf
+9,East Mediterranean,5-7k,32.0,34.0,33.0,FRMD WK 09-26.pdf
+9,East Mediterranean,10-15k,30.0,32.0,31.0,FRMD WK 09-26.pdf
+10,Turkish Black Sea,5-7k,25.0,27.0,26.0,FRMD WK 10-26.pdf
+10,Turkish Black Sea,10-15k,23.0,25.0,24.0,FRMD WK 10-26.pdf
+10,"Marmara, Turkey",5-7k,27.0,29.0,28.0,FRMD WK 10-26.pdf
+10,"Marmara, Turkey",10-15k,25.0,27.0,26.0,FRMD WK 10-26.pdf
+10,East Mediterranean,5-7k,35.0,37.0,36.0,FRMD WK 10-26.pdf
+10,East Mediterranean,10-15k,33.0,35.0,34.0,FRMD WK 10-26.pdf
+11,Turkish Black Sea,5-7k,27.0,29.0,28.0,FRMD WK 11-26.pdf
+11,Turkish Black Sea,10-15k,25.0,27.0,26.0,FRMD WK 11-26.pdf
+11,"Marmara, Turkey",5-7k,29.0,31.0,30.0,FRMD WK 11-26.pdf
+11,"Marmara, Turkey",10-15k,27.0,29.0,28.0,FRMD WK 11-26.pdf
+11,East Mediterranean,5-7k,38.0,40.0,39.0,FRMD WK 11-26.pdf
+11,East Mediterranean,10-15k,36.0,38.0,37.0,FRMD WK 11-26.pdf
+12,Turkish Black Sea,5-7k,28.0,30.0,29.0,FRMD WK 12-26.pdf
+12,Turkish Black Sea,10-15k,26.0,28.0,27.0,FRMD WK 12-26.pdf
+12,"Marmara, Turkey",5-7k,30.0,32.0,31.0,FRMD WK 12-26.pdf
+12,"Marmara, Turkey",10-15k,28.0,30.0,29.0,FRMD WK 12-26.pdf
+12,East Mediterranean,5-7k,39.0,41.0,40.0,FRMD WK 12-26.pdf
+12,East Mediterranean,10-15k,37.0,39.0,38.0,FRMD WK 12-26.pdf
+13,Turkish Black Sea,5-7k,28.0,30.0,29.0,FRMD WK 13-26.pdf
+13,Turkish Black Sea,10-15k,26.0,28.0,27.0,FRMD WK 13-26.pdf
+13,"Marmara, Turkey",5-7k,29.0,31.0,30.0,FRMD WK 13-26.pdf
+13,"Marmara, Turkey",10-15k,27.0,29.0,28.0,FRMD WK 13-26.pdf
+13,East Mediterranean,5-7k,39.0,41.0,40.0,FRMD WK 13-26.pdf
+13,East Mediterranean,10-15k,37.0,39.0,38.0,FRMD WK 13-26.pdf
+14,Turkish Black Sea,5-7k,27.0,29.0,28.0,FRMD WK 14-26.pdf
+14,Turkish Black Sea,10-15k,25.0,27.0,26.0,FRMD WK 14-26.pdf
+14,"Marmara, Turkey",5-7k,28.0,30.0,29.0,FRMD WK 14-26.pdf
+14,"Marmara, Turkey",10-15k,26.0,28.0,27.0,FRMD WK 14-26.pdf
+14,East Mediterranean,5-7k,38.0,40.0,39.0,FRMD WK 14-26.pdf
+14,East Mediterranean,10-15k,36.0,38.0,37.0,FRMD WK 14-26.pdf
+15,Turkish Black Sea,5-7k,27.0,29.0,28.0,FRMD WK 15-26.pdf
+15,Turkish Black Sea,10-15k,25.0,27.0,26.0,FRMD WK 15-26.pdf
+15,"Marmara, Turkey",5-7k,28.0,30.0,29.0,FRMD WK 15-26.pdf
+15,"Marmara, Turkey",10-15k,26.0,28.0,27.0,FRMD WK 15-26.pdf
+15,East Mediterranean,5-7k,38.0,40.0,39.0,FRMD WK 15-26.pdf
+15,East Mediterranean,10-15k,36.0,38.0,37.0,FRMD WK 15-26.pdf
+16,Turkish Black Sea,5-7k,27.0,29.0,28.0,FRMD WK 16-26.pdf
+16,Turkish Black Sea,10-15k,25.0,27.0,26.0,FRMD WK 16-26.pdf
+16,"Marmara, Turkey",5-7k,28.0,30.0,29.0,FRMD WK 16-26.pdf
+16,"Marmara, Turkey",10-15k,26.0,28.0,27.0,FRMD WK 16-26.pdf
+16,East Mediterranean,5-7k,38.0,40.0,39.0,FRMD WK 16-26.pdf
+16,East Mediterranean,10-15k,36.0,38.0,37.0,FRMD WK 16-26.pdf
+18,Turkish Black Sea,5-7k,25.0,27.0,26.0,FRMD WK 18-26.pdf
+18,Turkish Black Sea,10-15k,23.0,25.0,24.0,FRMD WK 18-26.pdf
+18,"Marmara, Turkey",5-7k,26.0,28.0,27.0,FRMD WK 18-26.pdf
+18,"Marmara, Turkey",10-15k,24.0,26.0,25.0,FRMD WK 18-26.pdf
+18,East Mediterranean,5-7k,36.0,38.0,37.0,FRMD WK 18-26.pdf
+18,East Mediterranean,10-15k,34.0,36.0,35.0,FRMD WK 18-26.pdf
+19,Turkish Black Sea,5-7k,25.0,27.0,26.0,FRMD WK 19-26.pdf
+19,Turkish Black Sea,10-15k,23.0,25.0,24.0,FRMD WK 19-26.pdf
+19,"Marmara, Turkey",5-7k,26.0,28.0,27.0,FRMD WK 19-26.pdf
+19,"Marmara, Turkey",10-15k,24.0,26.0,25.0,FRMD WK 19-26.pdf
+19,East Mediterranean,5-7k,36.0,38.0,37.0,FRMD WK 19-26.pdf
+19,East Mediterranean,10-15k,34.0,36.0,35.0,FRMD WK 19-26.pdf
+20,Turkish Black Sea,5-7k,25.0,27.0,26.0,FRMD WK 20-26.pdf
+20,Turkish Black Sea,10-15k,23.0,25.0,24.0,FRMD WK 20-26.pdf
+20,"Marmara, Turkey",5-7k,26.0,28.0,27.0,FRMD WK 20-26.pdf
+20,"Marmara, Turkey",10-15k,24.0,26.0,25.0,FRMD WK 20-26.pdf
+20,East Mediterranean,5-7k,36.0,38.0,37.0,FRMD WK 20-26.pdf
+20,East Mediterranean,10-15k,34.0,36.0,35.0,FRMD WK 20-26.pdf
+21,Turkish Black Sea,5-7k,25.0,27.0,26.0,FRMD WK 21-26.pdf
+21,Turkish Black Sea,10-15k,23.0,25.0,24.0,FRMD WK 21-26.pdf
+21,"Marmara, Turkey",5-7k,26.0,28.0,27.0,FRMD WK 21-26.pdf
+21,"Marmara, Turkey",10-15k,24.0,26.0,25.0,FRMD WK 21-26.pdf
+21,East Mediterranean,5-7k,35.0,37.0,36.0,FRMD WK 21-26.pdf
+21,East Mediterranean,10-15k,33.0,35.0,34.0,FRMD WK 21-26.pdf
+22,Turkish Black Sea,5-7k,25.0,27.0,26.0,FRMD WK 22-26.pdf
+22,Turkish Black Sea,10-15k,23.0,25.0,24.0,FRMD WK 22-26.pdf
+22,"Marmara, Turkey",5-7k,26.0,28.0,27.0,FRMD WK 22-26.pdf
+22,"Marmara, Turkey",10-15k,24.0,26.0,25.0,FRMD WK 22-26.pdf
+22,East Mediterranean,5-7k,35.0,37.0,36.0,FRMD WK 22-26.pdf
+22,East Mediterranean,10-15k,33.0,35.0,34.0,FRMD WK 22-26.pdf
+23,Turkish Black Sea,5-7k,23.0,25.0,24.0,FRMD WK 23-26.pdf
+23,Turkish Black Sea,10-15k,21.0,23.0,22.0,FRMD WK 23-26.pdf
+23,"Marmara, Turkey",5-7k,24.0,26.0,25.0,FRMD WK 23-26.pdf
+23,"Marmara, Turkey",10-15k,22.0,24.0,23.0,FRMD WK 23-26.pdf
+23,East Mediterranean,5-7k,32.0,34.0,33.0,FRMD WK 23-26.pdf
+23,East Mediterranean,10-15k,30.0,32.0,31.0,FRMD WK 23-26.pdf
+24,Turkish Black Sea,5-7k,23.0,25.0,24.0,FRMD WK 24-26.pdf
+24,Turkish Black Sea,10-15k,21.0,23.0,22.0,FRMD WK 24-26.pdf
+24,"Marmara, Turkey",5-7k,24.0,26.0,25.0,FRMD WK 24-26.pdf
+24,"Marmara, Turkey",10-15k,22.0,24.0,23.0,FRMD WK 24-26.pdf
+24,East Mediterranean,5-7k,32.0,34.0,33.0,FRMD WK 24-26.pdf
+24,East Mediterranean,10-15k,30.0,32.0,31.0,FRMD WK 24-26.pdf
+25,Turkish Black Sea,5-7k,22.0,24.0,23.0,FRMD WK 25-26.pdf
+25,Turkish Black Sea,10-15k,20.0,22.0,21.0,FRMD WK 25-26.pdf
+25,"Marmara, Turkey",5-7k,23.0,25.0,24.0,FRMD WK 25-26.pdf
+25,"Marmara, Turkey",10-15k,21.0,23.0,22.0,FRMD WK 25-26.pdf
+25,East Mediterranean,5-7k,31.0,33.0,32.0,FRMD WK 25-26.pdf
+25,East Mediterranean,10-15k,29.0,31.0,30.0,FRMD WK 25-26.pdf
+26,Turkish Black Sea,5-7k,21.0,23.0,22.0,FRMD WK 26-26.pdf
+26,Turkish Black Sea,10-15k,19.0,21.0,20.0,FRMD WK 26-26.pdf
+26,"Marmara, Turkey",5-7k,22.0,24.0,23.0,FRMD WK 26-26.pdf
+26,"Marmara, Turkey",10-15k,20.0,22.0,21.0,FRMD WK 26-26.pdf
+26,East Mediterranean,5-7k,29.0,31.0,30.0,FRMD WK 26-26.pdf
+26,East Mediterranean,10-15k,27.0,29.0,28.0,FRMD WK 26-26.pdf
+27,Turkish Black Sea,5-7k,21.0,23.0,22.0,FRMD WK 27-26.pdf
+27,Turkish Black Sea,10-15k,19.0,21.0,20.0,FRMD WK 27-26.pdf
+27,"Marmara, Turkey",5-7k,22.0,24.0,23.0,FRMD WK 27-26.pdf
+27,"Marmara, Turkey",10-15k,20.0,22.0,21.0,FRMD WK 27-26.pdf
+27,East Mediterranean,5-7k,27.0,29.0,28.0,FRMD WK 27-26.pdf
+27,East Mediterranean,10-15k,25.0,27.0,26.0,FRMD WK 27-26.pdf
+28,Turkish Black Sea,5-7k,21.0,23.0,22.0,FRMD WK 28-26.pdf
+28,Turkish Black Sea,10-15k,19.0,21.0,20.0,FRMD WK 28-26.pdf
+28,"Marmara, Turkey",5-7k,22.0,24.0,23.0,FRMD WK 28-26.pdf
+28,"Marmara, Turkey",10-15k,20.0,22.0,21.0,FRMD WK 28-26.pdf
+28,East Mediterranean,5-7k,27.0,29.0,28.0,FRMD WK 28-26.pdf
+28,East Mediterranean,10-15k,25.0,27.0,26.0,FRMD WK 28-26.pdf
+29,Turkish Black Sea,5-7k,23.0,25.0,24.0,FRMD WK 29-26.pdf
+29,Turkish Black Sea,10-15k,21.0,23.0,22.0,FRMD WK 29-26.pdf
+29,"Marmara, Turkey",5-7k,24.0,26.0,25.0,FRMD WK 29-26.pdf
+29,"Marmara, Turkey",10-15k,22.0,24.0,23.0,FRMD WK 29-26.pdf
+29,East Mediterranean,5-7k,30.0,32.0,31.0,FRMD WK 29-26.pdf
+29,East Mediterranean,10-15k,28.0,30.0,29.0,FRMD WK 29-26.pdf
+31,Turkish Black Sea,5-7k,45.0,47.0,46.0,FRMD WK 31-26.pdf
+31,Turkish Black Sea,10-15k,43.0,45.0,44.0,FRMD WK 31-26.pdf
+31,"Marmara, Turkey",5-7k,47.0,49.0,48.0,FRMD WK 31-26.pdf
+31,"Marmara, Turkey",10-15k,45.0,47.0,46.0,FRMD WK 31-26.pdf
+31,East Mediterranean,5-7k,59.0,61.0,60.0,FRMD WK 31-26.pdf
+31,East Mediterranean,10-15k,57.0,59.0,58.0,FRMD WK 31-26.pdf
+32,Turkish Black Sea,5-7k,47.0,49.0,48.0,FRMD WK 32-26.pdf
+32,Turkish Black Sea,10-15k,45.0,47.0,46.0,FRMD WK 32-26.pdf
+32,"Marmara, Turkey",5-7k,49.0,51.0,50.0,FRMD WK 32-26.pdf
+32,"Marmara, Turkey",10-15k,47.0,49.0,48.0,FRMD WK 32-26.pdf
+32,East Mediterranean,5-7k,64.0,66.0,65.0,FRMD WK 32-26.pdf
+32,East Mediterranean,10-15k,62.0,64.0,63.0,FRMD WK 32-26.pdf
+33,Turkish Black Sea,5-7k,49.0,51.0,50.0,FRMD WK 33-26.pdf
+33,Turkish Black Sea,10-15k,47.0,49.0,48.0,FRMD WK 33-26.pdf
+33,"Marmara, Turkey",5-7k,51.0,53.0,52.0,FRMD WK 33-26.pdf
+33,"Marmara, Turkey",10-15k,49.0,51.0,50.0,FRMD WK 33-26.pdf
+33,East Mediterranean,5-7k,64.0,66.0,65.0,FRMD WK 33-26.pdf
+33,East Mediterranean,10-15k,62.0,64.0,63.0,FRMD WK 33-26.pdf
+34,Turkish Black Sea,5-7k,49.0,51.0,50.0,FRMD WK 34-26.pdf
+34,Turkish Black Sea,10-15k,47.0,49.0,48.0,FRMD WK 34-26.pdf
+34,"Marmara, Turkey",5-7k,51.0,53.0,52.0,FRMD WK 34-26.pdf
+34,"Marmara, Turkey",10-15k,49.0,51.0,50.0,FRMD WK 34-26.pdf
+34,East Mediterranean,5-7k,65.0,67.0,66.0,FRMD WK 34-26.pdf
+34,East Mediterranean,10-15k,64.0,66.0,65.0,FRMD WK 34-26.pdf
+35,Turkish Black Sea,5-7k,50.0,52.0,51.0,FRMD WK 35-26.pdf
+35,Turkish Black Sea,10-15k,48.0,50.0,49.0,FRMD WK 35-26.pdf
+35,"Marmara, Turkey",5-7k,53.0,55.0,54.0,FRMD WK 35-26.pdf
+35,"Marmara, Turkey",10-15k,51.0,53.0,52.0,FRMD WK 35-26.pdf
+35,East Mediterranean,5-7k,69.0,71.0,70.0,FRMD WK 35-26.pdf
+35,East Mediterranean,10-15k,68.0,70.0,69.0,FRMD WK 35-26.pdf
+36,Turkish Black Sea,5-7k,66.0,68.0,67.0,FRMD WK 36-26.pdf
+36,Turkish Black Sea,10-15k,64.0,66.0,65.0,FRMD WK 36-26.pdf
+36,"Marmara, Turkey",5-7k,70.0,72.0,71.0,FRMD WK 36-26.pdf
+36,"Marmara, Turkey",10-15k,68.0,70.0,69.0,FRMD WK 36-26.pdf
+36,East Mediterranean,5-7k,91.0,93.0,92.0,FRMD WK 36-26.pdf
+36,East Mediterranean,10-15k,90.0,92.0,91.0,FRMD WK 36-26.pdf
+37,Turkish Black Sea,5-7k,66.0,68.0,67.0,FRMD WK 37-26.pdf
+37,Turkish Black Sea,10-15k,64.0,66.0,65.0,FRMD WK 37-26.pdf
+37,"Marmara, Turkey",5-7k,70.0,72.0,71.0,FRMD WK 37-26.pdf
+37,"Marmara, Turkey",10-15k,68.0,70.0,69.0,FRMD WK 37-26.pdf
+37,East Mediterranean,5-7k,91.0,93.0,92.0,FRMD WK 37-26.pdf
+37,East Mediterranean,10-15k,90.0,92.0,91.0,FRMD WK 37-26.pdf
