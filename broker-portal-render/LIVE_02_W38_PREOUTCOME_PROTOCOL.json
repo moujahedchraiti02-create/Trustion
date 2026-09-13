@@ -1,0 +1,43 @@
+{
+  "cycle_id": "LIVE-02",
+  "target_week": "38/26",
+  "freeze_date": "2026-09-13",
+  "source_cutoff_week": "37/26",
+  "integrity_rule": "No W38 STRIBROK outcome or later market evidence may influence frozen W38 predictions.",
+  "arms": {
+    "benchmark": {
+      "name": "LAST_PUBLISHED_MID",
+      "status": "FROZEN",
+      "n": 70,
+      "definition": "W37 published midpoint carried forward to W38."
+    },
+    "incumbent": {
+      "name": "MultiRouteEnsemble",
+      "status": "NOT_YET_FROZEN",
+      "reason": "The supplied artifacts contain frozen W37 outputs and holdout component outputs but not a verified executable inference pipeline for generating W38 from W37-only inputs."
+    },
+    "challenger": {
+      "name": "MultiRouteEnsemble + POST_SPIKE_PLATEAU_GUARD_v0.1",
+      "status": "RULE_REGISTERED_PREDICTIONS_NOT_YET_FROZEN",
+      "rule": "If LOW confidence AND prior aggregate WoW >=15 AND no hard port disruption AND base-model uplift >1 USD/mt, retain 25% of base-model uplift above Last.",
+      "scientific_status": "Post-LIVE-01 hypothesis; must be evaluated prospectively from W38 onward."
+    }
+  },
+  "scoring_plan": [
+    "MAE",
+    "RMSE",
+    "bias",
+    "interval coverage",
+    "direction accuracy",
+    "MAE by confidence",
+    "MAE by route/direction",
+    "incumbent vs Last",
+    "challenger vs incumbent"
+  ],
+  "prohibited_actions": [
+    "Do not backfill incumbent/challenger W38 predictions after seeing W38 outcomes.",
+    "Do not modify LIVE-01 scores.",
+    "Do not claim W37 counterfactual plateau performance as validated."
+  ],
+  "freeze_sha256": "2efbe9b1dc72cbab22f8984399e96697502797d53682804729b2eb1d94634dbb"
+}
