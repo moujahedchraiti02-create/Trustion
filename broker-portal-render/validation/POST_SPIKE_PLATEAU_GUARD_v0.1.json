@@ -1,0 +1,29 @@
+{
+  "rule_name": "POST_SPIKE_PLATEAU_GUARD_v0.1",
+  "status": "POST_LIVE_01_HYPOTHESIS_NOT_VALIDATED",
+  "created_after_live_cycle": "LIVE-01",
+  "must_not_retro_credit": true,
+  "conditions": {
+    "model_confidence": "LOW",
+    "prior_week_aggregate_wow_gte_usd_mt": 15,
+    "prior_week_port_disruption_eq": 0,
+    "model_uplift_vs_last_gt_usd_mt": 1.0
+  },
+  "action": {
+    "retain_fraction_of_model_uplift_above_last": 0.25,
+    "diagnostic_flag": "POST_SPIKE_PLATEAU_RISK",
+    "fresh_broker_check": "REQUIRED_OR_STRONGLY_RECOMMENDED",
+    "change_interval_logic": false
+  },
+  "W37_counterfactual_only": {
+    "triggered_forecasts": 26,
+    "original_model_mae_usd_mt": 1.6773,
+    "counterfactual_mae_usd_mt": 0.725,
+    "last_benchmark_mae_usd_mt": 0.0
+  },
+  "historical_W31_W36_retro_check": {
+    "trigger_count": 0,
+    "interpretation": "No damage to W31-W36 holdout, but no historical validation because rule never fired."
+  },
+  "prospective_requirement": "Freeze before W38 and evaluate on W38+ only."
+}
