@@ -1,0 +1,43 @@
+{
+  "reconstruction_version": "RECOVERED_MULTIROUTE_POINT_v0.1",
+  "recovered_point_model": {
+    "delta_formula": "Last + 0.825*(Last-Prev2) + 0.175*(Prev2-Prev3)",
+    "raw_weights": {
+      "Last": 0.4,
+      "Delta": 0.1,
+      "CargoCurve": 0.3,
+      "RouteNeighbor": 0.3
+    },
+    "ensemble": "weighted average normalized over available components",
+    "cargo": "latest reference-size midpoint + frozen cargo_adjustment from W37 Copilot artifact",
+    "neighbor": "mean of top-3 frozen neighbor latest midpoints + frozen median target-minus-neighbor spread"
+  },
+  "w37_reproduction": {
+    "all_series_n": 72,
+    "active_nonstale_n": 70,
+    "active_exact_to_cent_n": 53,
+    "active_within_1_cent_n": 68,
+    "active_max_abs_diff_usd_mt": 0.020000000000003126,
+    "active_mean_abs_diff_usd_mt": 0.0027142857142854787,
+    "delta_max_abs_diff_usd_mt": 0.010000000000005116,
+    "cargo_max_abs_diff_usd_mt": 0.0,
+    "neighbor_max_abs_diff_usd_mt": 0.060000000000002274,
+    "excluded_from_match_claim": [
+      "2 stale 25,000-30,000 Handy series where production neighbor handling differs and W37 outcome was unavailable"
+    ]
+  },
+  "w38_freeze": {
+    "rows": 70,
+    "target_week": "38/26",
+    "cutoff_week": "37/26",
+    "plateau_guard_triggers": 0,
+    "confidence_status": "NOT_RECONSTRUCTED",
+    "interval_status": "NOT_RECONSTRUCTED",
+    "freeze_sha256": "ff897bd6e4186c3022c72464e038a4c82f24bcfd77b673e827513faec12c89a1"
+  },
+  "artifact_sha256": {
+    "w37_audit": "a2cbba14d5cfa869bd2c6f7a529e0ff2c509a85a46442e7a988d69bcef85e356",
+    "w38_freeze": "ff897bd6e4186c3022c72464e038a4c82f24bcfd77b673e827513faec12c89a1"
+  },
+  "integrity_note": "W38 point forecasts were generated from W37-or-earlier inputs only. No W38 outcome was used. LIVE-01 remains unchanged."
+}
